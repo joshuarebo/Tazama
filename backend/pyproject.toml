@@ -93,6 +93,9 @@ ignore = [
 [tool.ruff.lint.per-file-ignores]
 "tests/**" = ["S", "ARG", "PTH", "T20", "DTZ"]
 "src/tazama/infrastructure/db/oracle/**" = ["S608"]  # reviewed, bound-param only; see module docstring
+# SQLAlchemy fixes the TypeDecorator signature, so `dialect` is required even when a
+# codec does not branch on it.
+"src/tazama/infrastructure/db/types.py" = ["ARG002"]
 
 [tool.ruff.lint.flake8-bugbear]
 extend-immutable-calls = ["fastapi.Depends", "fastapi.Query", "fastapi.Path", "fastapi.Header"]
@@ -209,13 +212,16 @@ source_modules = [
 forbidden_modules = ["httpx"]
 
 [[tool.importlinter.contracts]]
+# Dependencies point inward. `infrastructure` sits *above* `modules` because an adapter
+# must reference the port and DTOs it satisfies, while a module must never reference an
+# adapter — that direction is forbidden by the contract above, and by this ordering.
 name = "layered architecture"
 type = "layers"
 layers = [
     "tazama.api | tazama.worker",
+    "tazama.infrastructure",
     "tazama.ai",
     "tazama.modules",
-    "tazama.infrastructure",
     "tazama.core",
     "tazama.domain",
 ]
