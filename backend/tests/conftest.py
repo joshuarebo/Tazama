@@ -77,7 +77,8 @@ def pseudonymiser():
 def app(settings):
     from tazama.api.app import create_app
 
-    return create_app(settings)
+    # No background outbox tail in tests: the stream feed has its own tests.
+    return create_app(settings, stream_tail=False)
 
 
 @pytest.fixture

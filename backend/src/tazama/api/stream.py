@@ -13,6 +13,8 @@ from __future__ import annotations
 
 import asyncio
 import json
+import secrets
+import time
 from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
@@ -143,6 +145,80 @@ _STREAM = EventStream()
 
 def get_stream() -> EventStream:
     return _STREAM
+
+
+# ------------------------------------------------------------ SSE tickets
+
+
+#: Tickets are deliberately short-lived and single-use: a value in a URL ends up in proxy
+#: logs, browser history and referrers, so it must be worthless within seconds of issue.
+TICKET_TTL_SECONDS = 30.0
+MAX_OUTSTANDING_TICKETS = 2_000
+
+
+@dataclass(frozen=True, slots=True)
+class Ticket:
+    value: str
+    subject: str
+    role: str
+    expires_at: float
+
+
+class TicketStore:
+    """One-time tickets that let a header-less `EventSource` authenticate.
+
+    The browser's native `EventSource` cannot send an `Authorization` header, so something
+    has to travel in the URL. A general-purpose JWT must not: it is long-lived and grants
+    the whole API. A ticket is random, expires in seconds, is bound to one principal and is
+    consumed on first use, so a leaked URL is useless by the time anyone reads the log.
+    """
+
+    def __init__(self, *, ttl_seconds: float = TICKET_TTL_SECONDS) -> None:
+        self._ttl = ttl_seconds
+        self._tickets: dict[str, Ticket] = {}
+
+    def issue(self, *, subject: str, role: str, now: float | None = None) -> Ticket:
+        current = time.monotonic() if now is None else now
+        self._evict(current)
+        if len(self._tickets) >= MAX_OUTSTANDING_TICKETS:
+            # Shed the oldest rather than grow without bound under a flood of requests.
+            oldest = min(self._tickets.values(), key=lambda t: t.expires_at)
+            self._tickets.pop(oldest.value, None)
+        ticket = Ticket(
+            value=secrets.token_urlsafe(32),
+            subject=subject,
+            role=role,
+            expires_at=current + self._ttl,
+        )
+        self._tickets[ticket.value] = ticket
+        return ticket
+
+    def consume(self, value: str, *, now: float | None = None) -> Ticket | None:
+        """Redeem a ticket. Returns None if unknown, expired or already used."""
+        current = time.monotonic() if now is None else now
+        self._evict(current)
+        if not value:
+            return None
+        # `pop` is the single-use guarantee: a replay of the same URL finds nothing.
+        ticket = self._tickets.pop(value, None)
+        if ticket is None or ticket.expires_at <= current:
+            return None
+        return ticket
+
+    def _evict(self, now: float) -> None:
+        for value in [v for v, t in self._tickets.items() if t.expires_at <= now]:
+            self._tickets.pop(value, None)
+
+    @property
+    def outstanding(self) -> int:
+        return len(self._tickets)
+
+
+_TICKETS = TicketStore()
+
+
+def get_ticket_store() -> TicketStore:
+    return _TICKETS
 
 
 def incident_event(

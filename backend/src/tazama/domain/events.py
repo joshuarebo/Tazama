@@ -20,7 +20,7 @@ from datetime import datetime
 from enum import StrEnum
 from typing import Any, ClassVar, Self
 
-from tazama.core.ids import deterministic_id
+from tazama.domain.identifiers import deterministic_id
 
 
 class EventType(StrEnum):

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 
 import pytest
 from sqlalchemy import select
@@ -19,7 +20,7 @@ from tazama.infrastructure.db import session_factory
 from tazama.infrastructure.db.models import AuditLog, Incident, IncidentLink
 from tazama.infrastructure.eventbus import SessionOutboxWriter
 from tazama.worker import replay as replay_module
-from tazama.worker.consumers import AUDITED_EVENTS, STREAMED_EVENTS, build_consumers
+from tazama.worker.consumers import AUDITED_EVENTS, build_consumers
 from tazama.worker.scheduler import build_jobs
 
 T0 = datetime(2026, 3, 17, 10, 0, tzinfo=UTC)
@@ -49,19 +50,26 @@ def _incident_detected(incident_id: str = "INC-1", **payload: object) -> Inciden
 # ------------------------------------------------------------------ wiring
 
 
-def test_consumers_cover_the_streamed_and_audited_events(
-    settings, policies, frozen_clock, db_engine
-) -> None:
+def test_consumers_cover_every_audited_event(settings, policies, frozen_clock, db_engine) -> None:
     consumers = build_consumers(
         settings=settings,
         policies=policies,
         clock=frozen_clock,
         engine=db_engine,
     )
-    assert set(STREAMED_EVENTS) <= set(consumers)
     assert set(AUDITED_EVENTS) <= set(consumers)
     for handlers in consumers.values():
         assert handlers
+
+
+def test_the_worker_does_not_reach_into_the_api_layer() -> None:
+    """The worker is a separate process, so pushing into the API's in-process SSE stream
+    could never have worked in production — and the import direction was wrong. The API
+    tails the outbox instead (`api/stream_feed.py`)."""
+    source = (
+        Path(__file__).resolve().parents[1].parent / "src" / "tazama" / "worker" / "consumers.py"
+    ).read_text(encoding="utf-8")
+    assert "tazama.api" not in source
 
 
 def test_milestone_events_are_audited(
@@ -103,27 +111,6 @@ def test_non_milestone_events_are_not_audited(
             ),
         )
     assert db_session.execute(select(AuditLog)).all() == []
-
-
-def test_stream_notifier_never_raises_without_a_loop(
-    settings, policies, frozen_clock, db_engine
-) -> None:
-    """A UI notice must never be able to fail a pipeline step."""
-    consumers = build_consumers(
-        settings=settings,
-        policies=policies,
-        clock=frozen_clock,
-        engine=db_engine,
-    )
-    for handler in consumers[EventType.DEGRADATION_DETECTED]:
-        handler(
-            IncidentDetected(
-                aggregate_type=AggregateType.CELL,
-                aggregate_id="CELL-1",
-                occurred_at=T0,
-                dedupe_key="dk",
-            ),
-        )
 
 
 def test_scheduled_jobs_are_declared(settings) -> None:

@@ -1,0 +1,16 @@
+# Planned-maintenance heads-up.
+#
+# Two parts are allowed here and nowhere else: a maintenance notice has to carry a window
+# and a reason, and squeezing both into 160 characters produced text nobody could read.
+# Two is also the ceiling the renderer enforces, whatever a template asks for.
+id: maintenance
+version: "1"
+channel: sms
+approval_required: true
+max_length: 300
+max_parts: 2
+description: Planned maintenance window announced ahead of the work.
+required_slots: [area, window, service]
+languages:
+  en: "Planned maintenance in {{area}} on {{window}} may briefly affect {{service}}. We are improving the network in your area. Sorry for any inconvenience."
+  sw: "Matengenezo yaliyopangwa katika {{area}} {{window}} yanaweza kuathiri {{service}} kwa muda mfupi. Tunaboresha mtandao katika eneo lako. Pole kwa usumbufu wowote."

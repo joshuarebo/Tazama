@@ -1,0 +1,19 @@
+# Proactive "we already know" message, sent while an incident is still open.
+#
+# The only legal source of customer-facing text for this case. The AI may fill the slots
+# below; it may never add, remove or reword anything outside them (CLAUDE.md section 7).
+#
+# Swahili is written by a Swahili speaker, not machine-translated: "Pole kwa usumbufu" is
+# what an operator actually says, and it is shorter than a literal translation of the
+# English apology, which matters inside 160 characters.
+id: known_issue
+version: "1"
+channel: sms
+approval_required: true
+max_length: 160
+max_parts: 1
+description: Incident acknowledged and being worked on, with an expected fix time.
+required_slots: [service, area, eta]
+languages:
+  en: "We know about a {{service}} fault in {{area}} and are fixing it. Expected fix: {{eta}}. Sorry for the trouble."
+  sw: "Tunafahamu hitilafu ya {{service}} katika {{area}}. Tunaifanyia kazi; itarekebishwa ifikapo {{eta}}. Pole kwa usumbufu."
