@@ -13,7 +13,7 @@ from collections.abc import Sequence
 from datetime import UTC, datetime
 from typing import Any
 
-from sqlalchemy import Table, func, inspect, select, text
+from sqlalchemy import Table, delete, func, insert, inspect, select, text, update
 from sqlalchemy.engine import Engine
 from sqlalchemy.exc import SQLAlchemyError
 
@@ -520,7 +520,7 @@ class SqlQueryAuditSink:
     def record(self, entry: QueryAuditRecord) -> None:
         with self._engine.begin() as connection:
             connection.execute(
-                QueryAudit.__table__.insert().values(
+                insert(QueryAudit).values(
                     executed_at=entry.executed_at,
                     actor=entry.actor,
                     actor_role=entry.actor_role,
@@ -584,9 +584,11 @@ class SqlSavedQueryStore:
                 "is_shared": record.is_shared,
             }
             if existing:
-                connection.execute(table.update().where(table.c.id == record.id).values(**values))
+                connection.execute(
+                    update(SavedQuery).where(table.c.id == record.id).values(**values),
+                )
             else:
-                connection.execute(table.insert().values(id=record.id, **values))
+                connection.execute(insert(SavedQuery).values(id=record.id, **values))
         return record
 
     def list_for(self, actor: str) -> tuple[SavedQueryRecord, ...]:
@@ -617,7 +619,7 @@ class SqlSavedQueryStore:
         table = SavedQuery.__table__
         with self._engine.begin() as connection:
             result = connection.execute(
-                table.delete().where(table.c.id == query_id).where(table.c.created_by == actor),
+                delete(SavedQuery).where(table.c.id == query_id).where(table.c.created_by == actor),
             )
         return bool(result.rowcount)
 

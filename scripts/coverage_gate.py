@@ -32,7 +32,9 @@ def main() -> int:
     totals: dict[str, list[int]] = {prefix: [0, 0] for prefix in GATED_PREFIXES}
     overall = [0, 0]
     for cls in root.iter("class"):
-        filename = (cls.get("filename") or "").replace("\\", "/")
+        # coverage.py records paths relative to its source root, which may or may not
+        # include the `src/` prefix depending on how pytest was invoked.
+        filename = (cls.get("filename") or "").replace("\\", "/").removeprefix("src/")
         lines = [ln for ln in cls.iter("line") if ln.get("hits") is not None]
         covered = sum(1 for ln in lines if ln.get("hits") != "0")
         total = len(lines)

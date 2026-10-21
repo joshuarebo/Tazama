@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from functools import lru_cache
-from typing import TYPE_CHECKING, Annotated
+from typing import Annotated
 
 from fastapi import Depends, Header, Request
 
@@ -17,9 +17,7 @@ from tazama.core.clock import Clock, SystemClock
 from tazama.core.errors import Unauthenticated
 from tazama.core.security import Principal, Pseudonymiser
 from tazama.core.settings import Settings, get_settings
-
-if TYPE_CHECKING:  # avoids importing the module (and its heavy deps) at import time
-    from tazama.modules.discovery.service import DiscoveryService
+from tazama.modules.discovery.service import DiscoveryService
 
 
 def settings_dep() -> Settings:
@@ -139,4 +137,4 @@ def discovery_service(settings: SettingsDep) -> DiscoveryService:
     return build_discovery_service(settings)
 
 
-DiscoveryDep = Annotated["DiscoveryService", Depends(discovery_service)]
+DiscoveryDep = Annotated[DiscoveryService, Depends(discovery_service)]

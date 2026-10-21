@@ -32,13 +32,14 @@ from __future__ import annotations
 import json
 import math
 import random
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Iterable, Iterator, Mapping, Sequence
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from hashlib import sha256
 from typing import Any, Final
 
-from sqlalchemy import delete, func, insert, select
+from sqlalchemy import Table, delete, func, insert, select
 from sqlalchemy.orm import Session
 
 from tazama.core.ids import deterministic_id
@@ -55,7 +56,8 @@ from tazama.domain.value_objects import (
     Technology,
 )
 from tazama.infrastructure.db import models as m
-from tazama.infrastructure.db.engine import session_scope
+from tazama.infrastructure.db.base import Base
+from tazama.infrastructure.db.engine import get_engine, session_scope
 
 GENERATOR_VERSION: Final = "seed-1.0.0"
 
@@ -81,7 +83,7 @@ ALARMS_PER_DAY: Final = 14
 
 #: Deletion order for `reset=True`: children before parents (cell -> site is the only FK,
 #: but the order is written out in full so a future FK does not silently break it).
-_DELETE_ORDER: Final[tuple[type[m.Base], ...]] = (
+_DELETE_ORDER: Final[tuple[type[Base], ...]] = (
     m.GroundTruth,
     m.SeedRun,
     m.KpiCell,
@@ -803,15 +805,17 @@ class SeedSummary:
         lines += [f"{'-' * 22}{'-' * 12}", f"{'total':<22}{total:>12,}"]
 
         if include_scenarios:
-            lines += ["", f"{'scenario':<30}{'kind':<22}{'label':<28}window (UTC)"]
-            lines.append("-" * 110)
+            # Widths are sized to the longest seeded id so nothing collides; an operator
+            # reading this in a terminal should not have to guess where a column ends.
+            lines += ["", f"{'scenario':<34}{'kind':<28}{'label':<28}window (UTC)"]
+            lines.append("-" * 126)
             for fact in self.scenarios:
                 window = (
                     f"{fact.starts_at.strftime('%Y-%m-%d %H:%M')} -> "
-                    f"{fact.ends_at.strftime('%H:%M')}"
+                    f"{fact.ends_at.strftime('%Y-%m-%d %H:%M')}"
                 )
                 lines.append(
-                    f"{fact.scenario_id:<30}{fact.scenario_kind:<22}{fact.label:<28}{window}",
+                    f"{fact.scenario_id:<34}{fact.scenario_kind:<28}{fact.label:<28}{window}",
                 )
         return "\n".join(lines)
 
@@ -826,6 +830,29 @@ class _Degradation:
 
 
 # ===================================================================== helpers
+
+
+def _table(model: type[Base]) -> Table:
+    """The `Table` behind a mapped class.
+
+    Inserts go through the Core table rather than the mapped class: the ORM bulk path
+    builds per-row state we have no use for and cost about a third of the seed's runtime.
+    `MetaData.tables` is used instead of `__table__` because the declarative attribute is
+    typed as a `FromClause`, which is not accepted by `insert()` and carries no `indexes`.
+    """
+    return Base.metadata.tables[model.__tablename__]
+
+
+def _rng(*parts: object) -> random.Random:
+    """One independent, string-seeded generator per concern.
+
+    Mersenne Twister is the right tool here and `secrets` would be the wrong one: this
+    data exists to be reproducible, not unpredictable. The seed is always a *string*,
+    because `random.seed` specifies how it derives state from text, whereas a tuple would
+    go through `hash()` and therefore change with `PYTHONHASHSEED`.
+    """
+    text = "|".join(str(part) for part in parts)
+    return random.Random(text)  # noqa: S311 - reproducible synthetic data, never a secret
 
 
 def _clamp(value: float, low: float, high: float) -> float:
@@ -862,21 +889,17 @@ def _canon(row: Mapping[str, Any], keys: Sequence[str]) -> str:
     parts: list[str] = []
     for key in keys:
         value = row[key]
-        if value is None:
-            parts.append(f"{key}=~")
-        elif value is True:
-            parts.append(f"{key}=T")
-        elif value is False:
-            parts.append(f"{key}=F")
-        elif isinstance(value, datetime):
-            parts.append(f"{key}={value.astimezone(UTC).isoformat()}")
-        elif isinstance(value, str | int | float):
-            parts.append(f"{key}={value}")
-        else:
+        if isinstance(value, dict | list):
+            # `str()` on a mapping would depend on insertion order; JSON with sorted keys
+            # does not, and these columns only occur on a handful of small tables.
             parts.append(
-                f"{key}="
-                + json.dumps(value, sort_keys=True, ensure_ascii=False, separators=(",", ":")),
+                json.dumps(value, sort_keys=True, ensure_ascii=False, separators=(",", ":")),
             )
+        else:
+            # `str()` is total and deterministic for every scalar the seed produces
+            # (including aware datetimes, bools and None); the key names are hashed once
+            # per table in the header instead of once per row.
+            parts.append(str(value))
     return "|".join(parts)
 
 
@@ -892,20 +915,22 @@ class _Digest:
     def __init__(self) -> None:
         self._parts: dict[str, Any] = {}
         self._counts: dict[str, int] = {}
+        self._keys: dict[str, tuple[str, ...]] = {}
 
     def add(self, table: str, rows: Sequence[Mapping[str, Any]], *, presorted: bool = False) -> int:
         # Every row of a given table is built from one literal, so one key order suffices.
         keys = tuple(sorted(rows[0])) if rows else ()
-        lines = [_canon(row, keys) for row in rows]
-        if not presorted:
-            lines.sort()
         hasher = self._parts.get(table)
         if hasher is None:
             hasher = sha256()
             self._parts[table] = hasher
             self._counts[table] = 0
-        for line in lines:
-            hasher.update(line.encode("utf-8"))
+            self._keys[table] = keys
+        lines = [_canon(row, keys) for row in rows]
+        if not presorted:
+            lines.sort()
+        if lines:
+            hasher.update("\n".join(lines).encode("utf-8"))
             hasher.update(b"\n")
         self._counts[table] += len(lines)
         return len(lines)
@@ -917,8 +942,10 @@ class _Digest:
     def finalise(self) -> str:
         final = sha256()
         for table in sorted(self._parts):
+            columns = ",".join(self._keys[table])
             final.update(
-                f"{table}:{self._counts[table]}:{self._parts[table].hexdigest()}\n".encode(),
+                f"{table}:{columns}:{self._counts[table]}:"
+                f"{self._parts[table].hexdigest()}\n".encode(),
             )
         return final.hexdigest()
 
@@ -953,7 +980,7 @@ def _build_network(plan: _Plan) -> None:
     Every cell hangs off exactly one transmission link through exactly one site, which is
     what makes the cascade scenario a genuine graph problem rather than a coincidence.
     """
-    rng = random.Random(f"{plan.seed}|network")
+    rng = _rng(plan.seed, "network")
     core_id = deterministic_id("TND", "core", "national")
     plan.nodes.append(
         {
@@ -1403,7 +1430,7 @@ def _build_scenario_facts(plan: _Plan, spec: _ScenarioSpec) -> list[ScenarioFact
 
 def _cell_profile(seed: int, cell: Mapping[str, Any]) -> dict[str, float]:
     """Stable per-cell baseline: two cells in the same place still behave differently."""
-    rng = random.Random(f"{seed}|profile|{cell['id']}")
+    rng = _rng(seed, "profile", cell["id"])
     base = _TECH_BASE[Technology(cell["tech"])]
     return {
         "prb": rng.uniform(45.0, 72.0),
@@ -1564,7 +1591,7 @@ def _stream_kpis(
         region = cell["region"]
         profile = _cell_profile(plan.seed, cell)
         windows = plan.degradations.get(cell_id, ())
-        rng = random.Random(f"{plan.seed}|kpi|{cell_id}")
+        rng = _rng(plan.seed, "kpi", cell_id)
 
         for granularity, buckets, loads, step in grids:
             for i, bucket in enumerate(buckets):
@@ -1591,10 +1618,36 @@ def _stream_kpis(
     return total
 
 
+@contextmanager
+def _kpi_indexes_deferred(session: Session) -> Iterator[None]:
+    """Drop and rebuild `kpi_cell`'s secondary indexes around the bulk load.
+
+    `kpi_cell` carries five secondary indexes plus a unique constraint. Maintaining all of
+    them per row dominated the seed's wall clock (~27s of ~70s), and rebuilding them once
+    at the end is dramatically cheaper. This is done on SQLite only, where DDL takes part
+    in the surrounding transaction: a failed seed rolls the drops back with the data. On
+    Oracle DDL commits implicitly, so losing an index to a crashed seed is a real
+    operational hazard and is not worth the saving.
+    """
+    bind = session.get_bind()
+    indexes = list(_table(m.KpiCell).indexes)
+    if bind.dialect.name != "sqlite":
+        yield
+        return
+    connection = session.connection()
+    for index in indexes:
+        index.drop(connection, checkfirst=True)
+    try:
+        yield
+    finally:
+        for index in indexes:
+            index.create(connection, checkfirst=True)
+
+
 def _flush_kpi(session: Session, digest: _Digest, rows: list[dict[str, Any]]) -> int:
     digest.add(m.KpiCell.__tablename__, rows, presorted=True)
     for i in range(0, len(rows), CHUNK):
-        session.execute(insert(m.KpiCell.__table__), rows[i : i + CHUNK])
+        session.execute(insert(_table(m.KpiCell)), rows[i : i + CHUNK])
     return len(rows)
 
 
@@ -1607,7 +1660,7 @@ def _build_alarms(plan: _Plan, spec: _ScenarioSpec) -> list[dict[str, Any]]:
     Background alarms deliberately avoid scenario cells: a stray alarm on the false-alarm
     cell would turn a precision test into a coin toss.
     """
-    rng = random.Random(f"{plan.seed}|alarms")
+    rng = _rng(plan.seed, "alarms")
     rows: list[dict[str, Any]] = []
     seq = 0
 
@@ -1810,7 +1863,7 @@ def _build_subscribers(
     from tazama.core.security import Pseudonymiser
 
     pseudonymiser = Pseudonymiser(pseudonym_salt)
-    rng = random.Random(f"{plan.seed}|subscribers")
+    rng = _rng(plan.seed, "subscribers")
     all_cells = sorted(plan.cell_by_id)
     rows: list[dict[str, Any]] = []
     by_region: dict[str, list[str]] = {}
@@ -1907,7 +1960,7 @@ class _ComplaintFactory:
         self._plan = plan
         self._subs = subs_by_region
         #: Public so the scenario builder shares one stream (and therefore one order).
-        self.rng = random.Random(f"{plan.seed}|complaints")
+        self.rng = _rng(plan.seed, "complaints")
         self._seq = 0
         self.rows: list[dict[str, Any]] = []
         self.truth: list[tuple[str, str, str, str]] = []
@@ -1937,6 +1990,7 @@ class _ComplaintFactory:
         channel: Channel | None = None,
         text: str | None = None,
         lag: timedelta | None = None,
+        ingested_at: datetime | None = None,
         force_known_cell: bool | None = None,
         dedupe_key: str | None = None,
         subscriber_id: str | None = None,
@@ -1953,9 +2007,11 @@ class _ComplaintFactory:
         if subscriber_id is None:
             subscriber_id = self._subscriber(region)
 
-        source_ts = received_at - (
-            lag if lag is not None else timedelta(seconds=rng.randint(2, 180))
-        )
+        # Both draws happen unconditionally so that overriding a field never shifts the
+        # random stream for the rows that follow.
+        default_lag = timedelta(seconds=rng.randint(2, 180))
+        default_ingested = received_at + timedelta(seconds=rng.randint(1, 90))
+        source_ts = received_at - (lag if lag is not None else default_lag)
         known = (
             rng.random() < self.KNOWN_CELL_RATE if force_known_cell is None else force_known_cell
         )
@@ -1966,7 +2022,7 @@ class _ComplaintFactory:
             "id": complaint_id,
             "received_at": received_at,
             "source_ts": source_ts,
-            "ingested_at": received_at + timedelta(seconds=rng.randint(1, 90)),
+            "ingested_at": ingested_at if ingested_at is not None else default_ingested,
             "channel": channel.value,
             "language": language.value,
             "raw_text": text,
@@ -2153,6 +2209,9 @@ def _build_complaints(
             cell_id=nakuru_cells[(i * 5) % len(nakuru_cells)],
             received_at=received,
             lag=timedelta(hours=5, minutes=i * 6),
+            # Ingestion order rises monotonically while `received_at` jumps around, so a
+            # watermark kept on ingestion time provably sees event time go backwards.
+            ingested_at=ANCHOR - timedelta(minutes=40) + timedelta(seconds=i * 30),
             channel=Channel.SMS,
         )
     return factory
@@ -2165,7 +2224,7 @@ def _build_care_calls(
     plan: _Plan,
     subs_by_region: Mapping[str, Sequence[str]],
 ) -> list[dict[str, Any]]:
-    rng = random.Random(f"{plan.seed}|care")
+    rng = _rng(plan.seed, "care")
     cells = sorted(plan.cell_by_id)
     rows: list[dict[str, Any]] = []
     for i in range(int(CARE_CALLS_PER_DAY * plan.days)):
@@ -2201,7 +2260,7 @@ def _build_care_calls(
 
 def _build_maintenance(plan: _Plan, spec: _ScenarioSpec) -> list[dict[str, Any]]:
     """Eight windows. The first one is the suppression scenario and must overlap it."""
-    rng = random.Random(f"{plan.seed}|maintenance")
+    rng = _rng(plan.seed, "maintenance")
     rows: list[dict[str, Any]] = [
         {
             "id": deterministic_id("MWD", str(plan.seed), "scenario-06"),
@@ -2268,7 +2327,7 @@ def _build_runbooks(plan: _Plan) -> list[dict[str, Any]]:
             "high",
             (
                 "Identify the failed link and enumerate every child site from the topology.",
-                "Confirm whether the link is protected; if so, verify the protection path took over.",
+                "Confirm whether the link is protected; if so, check the protection path.",
                 "Check for a concurrent planned change on the link or its aggregation node.",
                 "Escalate to the transmission team with the affected site and subscriber counts.",
                 "Hold customer notification until the protection state is confirmed.",
@@ -2285,7 +2344,7 @@ def _build_runbooks(plan: _Plan) -> list[dict[str, Any]]:
             "low",
             (
                 "Confirm PRB utilisation above threshold for at least three consecutive buckets.",
-                "Confirm throughput degradation correlates with the utilisation, not with coverage.",
+                "Confirm throughput loss tracks the utilisation, not a coverage problem.",
                 "Check the local busy hour in Africa/Nairobi, not UTC.",
                 "Propose a load-balancing parameter change or a carrier addition.",
                 "Schedule the change outside the local busy hour.",
@@ -2558,9 +2617,9 @@ def _assert_empty_or_reset(session: Session, reset: bool) -> None:
         )
 
 
-def _insert(session: Session, model: type[m.Base], rows: Sequence[Mapping[str, Any]]) -> None:
+def _insert(session: Session, model: type[Base], rows: Sequence[Mapping[str, Any]]) -> None:
     for i in range(0, len(rows), CHUNK):
-        session.execute(insert(model.__table__), list(rows[i : i + CHUNK]))
+        session.execute(insert(_table(model)), list(rows[i : i + CHUNK]))
 
 
 def run_seed(
@@ -2622,7 +2681,7 @@ def run_seed(
     ground_truth = _build_ground_truth(plan.scenarios, complaints.truth)
 
     digest = _Digest()
-    payloads: tuple[tuple[type[m.Base], Sequence[Mapping[str, Any]]], ...] = (
+    payloads: tuple[tuple[type[Base], Sequence[Mapping[str, Any]]], ...] = (
         (m.Site, plan.sites),
         (m.Cell, plan.cells),
         (m.TopologyNode, plan.nodes),
@@ -2637,12 +2696,15 @@ def run_seed(
         (m.GroundTruth, ground_truth),
     )
 
-    with session_scope(settings=settings, write=True) as session:
+    # The engine is resolved from the injected settings explicitly: `session_scope` would
+    # otherwise fall back to the process-wide default and write to the wrong database.
+    with session_scope(get_engine(settings), settings=settings, write=True) as session:
         _assert_empty_or_reset(session, reset)
         for model, rows in payloads:
             digest.add(model.__tablename__, rows)
             _insert(session, model, rows)
-        _stream_kpis(session, plan, digest)
+        with _kpi_indexes_deferred(session):
+            _stream_kpis(session, plan, digest)
 
         content_hash = digest.finalise()
         counts = digest.counts
@@ -2657,7 +2719,7 @@ def run_seed(
             "content_hash": content_hash,
             "created_at": ANCHOR,
         }
-        session.execute(insert(m.SeedRun.__table__), [run_row])
+        session.execute(insert(_table(m.SeedRun)), [run_row])
 
     counts[m.SeedRun.__tablename__] = 1
     return SeedSummary(

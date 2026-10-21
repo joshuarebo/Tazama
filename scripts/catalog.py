@@ -56,8 +56,9 @@ def main() -> int:
         relative = out_path.relative_to(ROOT)
     except ValueError:  # an absolute path outside the repo is fine too
         relative = out_path
+    # ASCII only: a Windows console in cp1252 would mangle anything else.
     print(  # noqa: T201
-        f"wrote {relative} — {len(snapshot.tables)} tables, {snapshot.total_rows:,} rows",
+        f"wrote {relative} - {len(snapshot.tables)} tables, {snapshot.total_rows:,} rows",
     )
     # A broken mapping is a configuration error worth failing the command for.
     return 0 if mapping_report.ok else 1

@@ -51,7 +51,9 @@ class Msisdn:
         Rejected: anything else — including landlines, short codes and foreign numbers,
         which are routed to human review rather than guessed at.
         """
-        if raw is None:  # type: ignore[comparison-overlap]
+        # The annotation says `str`, but this is a boundary: ingestion adapters hand over
+        # whatever the source system had, and None must fail loudly rather than become "None".
+        if raw is None:
             raise MsisdnError("MSISDN is required")
         text = unicodedata.normalize("NFKC", str(raw)).strip()
         # Strip every space the channels send us, non-breaking ones included.

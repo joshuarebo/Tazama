@@ -17,6 +17,7 @@ boundaries: `modules/` must not import `infrastructure/`).
 
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Literal
@@ -132,7 +133,29 @@ class MappingReport:
         return f"{status}, coverage {self.coverage_pct}%"
 
 
-DEFAULT_PATH = Path("config/source_mappings.yaml")
+#: Relative path of the mapping file inside the repository.
+CONFIG_RELATIVE = Path("config") / "source_mappings.yaml"
+
+
+def default_mappings_path() -> Path:
+    """Locate `config/source_mappings.yaml` without depending on the working directory.
+
+    The CLI runs from the repository root, pytest runs from `backend/`, and a container
+    runs from `/app`, so a relative path would resolve differently in each. The file is
+    found by walking up from this module, with `TAZAMA_CONFIG_DIR` as an override for
+    deployments that mount configuration elsewhere.
+    """
+    override = os.environ.get("TAZAMA_CONFIG_DIR", "").strip()
+    if override:
+        return Path(override) / CONFIG_RELATIVE.name
+    for parent in Path(__file__).resolve().parents:
+        candidate = parent / CONFIG_RELATIVE
+        if candidate.exists():
+            return candidate
+    return CONFIG_RELATIVE
+
+
+DEFAULT_PATH = default_mappings_path()
 
 
 def _as_str_dict(value: Any, entity: str, field_name: str) -> dict[str, str]:

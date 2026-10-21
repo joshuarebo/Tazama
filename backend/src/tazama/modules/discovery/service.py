@@ -28,6 +28,7 @@ from tazama.core.security import Principal
 from tazama.modules.discovery.mappings import (
     DEFAULT_PATH,
     MappingReport,
+    Mode,
     load_mappings,
     validate_mappings,
 )
@@ -163,7 +164,7 @@ class DiscoveryService:
             mode=self._mapping_mode(),
         )
 
-    def _mapping_mode(self) -> str:
+    def _mapping_mode(self) -> Mode:
         return "live" if self._ctx.app_mode == "live" else "demo"
 
     # ------------------------------------------------------------ explorer

@@ -158,6 +158,10 @@ class CatalogSnapshot:
             "rate, integrity via throughput and latency, utilisation via PRB) but each "
             "operator defines its own counters. Reconcile with the real counter "
             "definitions before any live use.",
+            "* **Legacy-technology KPIs are generous on purpose.** The thresholds are "
+            "LTE-shaped, so seeded 2G/3G cells are given baselines that sit just inside "
+            "them. Real legacy cells would breach an LTE throughput or latency threshold "
+            "permanently; per-technology thresholds are needed before live use.",
             "* **No raw subscriber identifiers exist in this schema.** `subscriber.id` is "
             "an HMAC pseudonym; columns marked PII are masked by default in the explorer "
             "and in exports.",

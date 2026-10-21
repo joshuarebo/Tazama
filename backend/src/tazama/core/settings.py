@@ -271,6 +271,19 @@ class Settings(BaseSettings):
         return ZoneInfo(self.DISPLAY_TZ)
 
     @property
+    def sqlite_target(self) -> str:
+        """`SQLITE_PATH`, anchored to the repository root when it is relative.
+
+        Without this, `make migrate` (which runs from `backend/`) and `make seed` (which
+        runs from the repository root) would create two different database files.
+        """
+        if self.SQLITE_PATH in ("", ":memory:"):
+            return ":memory:"
+        from tazama.core.paths import resolve
+
+        return str(resolve(self.SQLITE_PATH))
+
+    @property
     def cors_origins(self) -> list[str]:
         return [o.strip() for o in self.CORS_ORIGINS.split(",") if o.strip()]
 

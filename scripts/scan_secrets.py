@@ -44,7 +44,8 @@ RULES: list[tuple[str, re.Pattern[str]]] = [
 
 PLACEHOLDER = re.compile(
     r"(?i)(change-?me|replace-?with|dev-only|example|placeholder|xxx+|your-|fake|dummy"
-    r"|\btest-|\bci-|sample|not-the-|another-secret|hunter2|\$\{|<[a-z_]+>)",
+    # `{...}` means an interpolation placeholder, i.e. a template rather than a value.
+    r"|\btest-|\bci-|sample|not-the-|another-secret|hunter2|\$\{|\{|<[a-z_]+>)",
 )
 
 #: Inline suppression for lines that deliberately contain a credential *shape* — the

@@ -327,7 +327,9 @@ def downgrade() -> None:
 
 @task("seed", "Deterministic synthetic seed with all labelled scenarios", "data", ("migrate",))
 def seed() -> None:
-    uv_run(["python", str(ROOT / "scripts" / "seed.py")], cwd=ROOT)
+    # `--reset` keeps `make seed` and `make demo` idempotent. The script itself refuses to
+    # overwrite a populated database without it, which is the behaviour you want from a CLI.
+    uv_run(["python", str(ROOT / "scripts" / "seed.py"), "--reset"], cwd=ROOT)
 
 
 @task("catalog", "Regenerate docs/data-catalog.md and the join-coverage report", "data")

@@ -3,7 +3,7 @@
 Conventions, applied everywhere:
   * Table and column names are uppercase-free snake_case and <= 30 characters, so the same
     DDL is valid on Oracle.
-  * Every timestamp is `UtcDateTime` â€” stored UTC, returned timezone-aware.
+  * Every timestamp is `UtcDateTime` - stored UTC, returned timezone-aware.
   * JSON lives in `JsonText` (CLOB on Oracle, with an `IS JSON` check added by migration).
   * Subscriber identity is a pseudonym token; there is **no raw MSISDN column anywhere**
     (ADR 0008). `msisdn_format` records only which *shape* the input used, for testing.
@@ -16,6 +16,7 @@ Conventions, applied everywhere:
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Any
 
 from sqlalchemy import (
     Boolean,
@@ -32,6 +33,12 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from tazama.infrastructure.db.base import Base
 from tazama.infrastructure.db.types import Embedding, JsonText, UtcDateTime
+
+#: JSON payloads are documents, so the element type is deliberately open.
+# Plain aliases rather than 	ype statements: SQLAlchemy resolves these annotations at
+# runtime, so they must be ordinary objects.
+JsonDict = dict[str, Any]
+JsonList = list[Any]
 
 ID = String(40)
 SHORT = String(40)
@@ -126,7 +133,7 @@ class Alarm(Base):
     is_flapping: Mapped[bool] = mapped_column(Boolean, default=False)
     source: Mapped[str] = mapped_column(CODE, default="nms_mock")
     external_ref: Mapped[str | None] = mapped_column(SHORT)
-    details: Mapped[dict | None] = mapped_column(JsonText)
+    details: Mapped[JsonDict | None] = mapped_column(JsonText)
 
     __table_args__ = (Index("ix_alarm_node_raised", "node_id", "raised_at"),)
 
@@ -198,7 +205,7 @@ class Subscriber(Base):
 
     __tablename__ = "subscriber"
 
-    id: Mapped[str] = mapped_column(ID, primary_key=True)  # SUB-â€¦ pseudonym token
+    id: Mapped[str] = mapped_column(ID, primary_key=True)  # SUB-... pseudonym token
     region: Mapped[str] = mapped_column(CODE, index=True)
     home_cell_id: Mapped[str | None] = mapped_column(ID, index=True)
     last_cell_id: Mapped[str | None] = mapped_column(ID, index=True)
@@ -209,7 +216,9 @@ class Subscriber(Base):
     sla_tier: Mapped[str | None] = mapped_column(CODE)
     opt_out: Mapped[bool] = mapped_column(Boolean, default=False)
     is_roaming: Mapped[bool] = mapped_column(Boolean, default=False)
-    #: Which input shape this subscriber's number arrived in (+254â€¦, 0â€¦, 254â€¦, 7â€¦).
+    #: Which input shape this subscriber's number arrived in
+    #: (+2547.., 07.., 2547.., 7..). Kept so normalisation is exercised by real
+    #: seeded variety, never the number itself.
     #: Kept so normalisation is exercised by real seeded variety, never the number itself.
     msisdn_format: Mapped[str | None] = mapped_column(CODE)
     created_at: Mapped[datetime | None] = mapped_column(UtcDateTime)
@@ -327,7 +336,7 @@ class Diagnosis(Base):
     incident_id: Mapped[str] = mapped_column(ID, index=True)
     probable_cause: Mapped[str] = mapped_column(CODE)
     confidence: Mapped[float] = mapped_column(Float)
-    evidence: Mapped[list | None] = mapped_column(JsonText)
+    evidence: Mapped[JsonList | None] = mapped_column(JsonText)
     runbook_id: Mapped[str | None] = mapped_column(ID)
     explanation: Mapped[str | None] = mapped_column(Text)
     created_by: Mapped[str] = mapped_column(CODE)  # diagnosis_agent | rules | human
@@ -353,7 +362,7 @@ class CaseRecord(Base):
     assigned_team: Mapped[str | None] = mapped_column(CODE, index=True)
     assigned_at: Mapped[datetime | None] = mapped_column(UtcDateTime)
     routing_reason: Mapped[str | None] = mapped_column(NAME)
-    decision_inputs: Mapped[dict | None] = mapped_column(JsonText)
+    decision_inputs: Mapped[JsonDict | None] = mapped_column(JsonText)
     rule_version: Mapped[str | None] = mapped_column(CODE)
     model_version: Mapped[str | None] = mapped_column(CODE)
     sla_due_at: Mapped[datetime | None] = mapped_column(UtcDateTime)
@@ -370,8 +379,8 @@ class Runbook(Base):
     title: Mapped[str] = mapped_column(NAME)
     cause: Mapped[str] = mapped_column(CODE, index=True)
     risk_tier: Mapped[str] = mapped_column(CODE)  # low | medium | high
-    steps: Mapped[list] = mapped_column(JsonText)
-    rollback: Mapped[list | None] = mapped_column(JsonText)
+    steps: Mapped[JsonList] = mapped_column(JsonText)
+    rollback: Mapped[JsonList | None] = mapped_column(JsonText)
     expected_effect: Mapped[str | None] = mapped_column(Text)
     requires_approval: Mapped[bool] = mapped_column(Boolean, default=True)
     owner: Mapped[str | None] = mapped_column(CODE)
@@ -388,7 +397,7 @@ class RecoveryAction(Base):
     runbook_id: Mapped[str] = mapped_column(ID, index=True)
     status: Mapped[str] = mapped_column(CODE, index=True)
     risk_tier: Mapped[str] = mapped_column(CODE)
-    simulated_outcome: Mapped[dict | None] = mapped_column(JsonText)
+    simulated_outcome: Mapped[JsonDict | None] = mapped_column(JsonText)
     proposed_by: Mapped[str] = mapped_column(CODE)
     proposed_at: Mapped[datetime] = mapped_column(UtcDateTime)
     approved_by: Mapped[str | None] = mapped_column(SHORT)
@@ -410,7 +419,7 @@ class Verification(Base):
     quiet_period_ok: Mapped[bool] = mapped_column(Boolean)
     complaints_after: Mapped[int] = mapped_column(Integer, default=0)
     passed: Mapped[bool] = mapped_column(Boolean, index=True)
-    detail: Mapped[dict | None] = mapped_column(JsonText)
+    detail: Mapped[JsonDict | None] = mapped_column(JsonText)
 
 
 class Notification(Base):
@@ -421,7 +430,7 @@ class Notification(Base):
     subscriber_id: Mapped[str | None] = mapped_column(ID, index=True)
     template_id: Mapped[str] = mapped_column(CODE, index=True)
     template_version: Mapped[str | None] = mapped_column(CODE)
-    slots: Mapped[dict | None] = mapped_column(JsonText)
+    slots: Mapped[JsonDict | None] = mapped_column(JsonText)
     rendered_text: Mapped[str | None] = mapped_column(Text)
     language: Mapped[str] = mapped_column(CODE, default="en")
     channel: Mapped[str] = mapped_column(CODE, default="sms")
@@ -449,9 +458,9 @@ class KnowledgeDoc(Base):
     owner: Mapped[str] = mapped_column(CODE)
     valid_from: Mapped[datetime | None] = mapped_column(UtcDateTime)
     expires_at: Mapped[datetime | None] = mapped_column(UtcDateTime, index=True)
-    tags: Mapped[list | None] = mapped_column(JsonText)
+    tags: Mapped[JsonList | None] = mapped_column(JsonText)
     chunk_index: Mapped[int] = mapped_column(Integer, default=0)
-    embedding: Mapped[list | None] = mapped_column(Embedding)
+    embedding: Mapped[JsonList | None] = mapped_column(Embedding)
     embedding_model: Mapped[str | None] = mapped_column(CODE)
     updated_at: Mapped[datetime | None] = mapped_column(UtcDateTime)
 
@@ -470,7 +479,7 @@ class Prediction(Base):
     value: Mapped[float] = mapped_column(Float)
     lower: Mapped[float | None] = mapped_column(Float)
     upper: Mapped[float | None] = mapped_column(Float)
-    features: Mapped[dict | None] = mapped_column(JsonText)
+    features: Mapped[JsonDict | None] = mapped_column(JsonText)
     created_at: Mapped[datetime] = mapped_column(UtcDateTime)
 
 
@@ -482,9 +491,9 @@ class ModelRegistry(Base):
     version: Mapped[str] = mapped_column(CODE)
     algorithm: Mapped[str] = mapped_column(CODE)
     trained_at: Mapped[datetime] = mapped_column(UtcDateTime)
-    metrics: Mapped[dict | None] = mapped_column(JsonText)
-    params: Mapped[dict | None] = mapped_column(JsonText)
-    feature_list: Mapped[list | None] = mapped_column(JsonText)
+    metrics: Mapped[JsonDict | None] = mapped_column(JsonText)
+    params: Mapped[JsonDict | None] = mapped_column(JsonText)
+    feature_list: Mapped[JsonList | None] = mapped_column(JsonText)
     data_hash: Mapped[str | None] = mapped_column(String(64))
     artifact_path: Mapped[str | None] = mapped_column(NAME)
     card_path: Mapped[str | None] = mapped_column(NAME)
@@ -502,10 +511,10 @@ class EvalRun(Base):
     llm_mode: Mapped[str] = mapped_column(CODE)  # fake | live
     started_at: Mapped[datetime] = mapped_column(UtcDateTime, index=True)
     finished_at: Mapped[datetime | None] = mapped_column(UtcDateTime)
-    metrics: Mapped[dict | None] = mapped_column(JsonText)
-    thresholds: Mapped[dict | None] = mapped_column(JsonText)
+    metrics: Mapped[JsonDict | None] = mapped_column(JsonText)
+    thresholds: Mapped[JsonDict | None] = mapped_column(JsonText)
     passed: Mapped[bool | None] = mapped_column(Boolean)
-    prompt_versions: Mapped[dict | None] = mapped_column(JsonText)
+    prompt_versions: Mapped[JsonDict | None] = mapped_column(JsonText)
     notes: Mapped[str | None] = mapped_column(Text)
 
 
@@ -525,12 +534,12 @@ class AuditLog(Base):
     entity_type: Mapped[str | None] = mapped_column(CODE)
     entity_id: Mapped[str | None] = mapped_column(ID, index=True)
     outcome: Mapped[str] = mapped_column(CODE)
-    inputs: Mapped[dict | None] = mapped_column(JsonText)
+    inputs: Mapped[JsonDict | None] = mapped_column(JsonText)
     rule_version: Mapped[str | None] = mapped_column(CODE)
     model_version: Mapped[str | None] = mapped_column(CODE)
     prompt_version: Mapped[str | None] = mapped_column(CODE)
     confidence: Mapped[float | None] = mapped_column(Float)
-    evidence: Mapped[list | None] = mapped_column(JsonText)
+    evidence: Mapped[JsonList | None] = mapped_column(JsonText)
     correlation_id: Mapped[str | None] = mapped_column(String(64), index=True)
     client_ip: Mapped[str | None] = mapped_column(CODE)
 
@@ -545,7 +554,7 @@ class OutboxEvent(Base):
     event_version: Mapped[int] = mapped_column(Integer, default=1)
     aggregate_type: Mapped[str] = mapped_column(CODE)
     aggregate_id: Mapped[str] = mapped_column(ID, index=True)
-    payload: Mapped[dict] = mapped_column(JsonText)
+    payload: Mapped[JsonDict] = mapped_column(JsonText)
     occurred_at: Mapped[datetime] = mapped_column(UtcDateTime, index=True)
     available_at: Mapped[datetime] = mapped_column(UtcDateTime, index=True)
     published_at: Mapped[datetime | None] = mapped_column(UtcDateTime)
@@ -592,7 +601,7 @@ class ReportDelivery(Base):
     report_id: Mapped[str] = mapped_column(ID, index=True)
     kind: Mapped[str] = mapped_column(CODE)
     idempotency_key: Mapped[str] = mapped_column(String(64))
-    card: Mapped[dict | None] = mapped_column(JsonText)
+    card: Mapped[JsonDict | None] = mapped_column(JsonText)
     status: Mapped[str] = mapped_column(CODE, index=True)  # dry_run|sent|failed|dead_letter
     attempts: Mapped[int] = mapped_column(Integer, default=0)
     last_error: Mapped[str | None] = mapped_column(NAME)
@@ -643,7 +652,7 @@ class GroundTruth(Base):
 
     Scenario labels say what the seed *built*; the pipeline must derive the same thing
     from observations alone. Only the seed writes here and only evals/scenario tests read
-    here â€” a leakage test asserts that no module imports this table.
+    here - a leakage test asserts that no module imports this table.
     """
 
     __tablename__ = "ground_truth"
@@ -657,7 +666,7 @@ class GroundTruth(Base):
     region: Mapped[str | None] = mapped_column(CODE)
     starts_at: Mapped[datetime | None] = mapped_column(UtcDateTime)
     ends_at: Mapped[datetime | None] = mapped_column(UtcDateTime)
-    detail: Mapped[dict | None] = mapped_column(JsonText)
+    detail: Mapped[JsonDict | None] = mapped_column(JsonText)
     created_at: Mapped[datetime] = mapped_column(UtcDateTime)
 
 
@@ -672,7 +681,7 @@ class SeedRun(Base):
     fine_days: Mapped[int] = mapped_column(Integer)
     generator_version: Mapped[str] = mapped_column(CODE)
     anchor_at: Mapped[datetime] = mapped_column(UtcDateTime)
-    row_counts: Mapped[dict | None] = mapped_column(JsonText)
+    row_counts: Mapped[JsonDict | None] = mapped_column(JsonText)
     content_hash: Mapped[str] = mapped_column(String(64))
     created_at: Mapped[datetime] = mapped_column(UtcDateTime)
 

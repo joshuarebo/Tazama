@@ -29,7 +29,7 @@ def _include_object(obj, name, type_, reflected, compare_to) -> bool:  # noqa: A
 def run_migrations_offline() -> None:
     settings = get_settings()
     url = (
-        f"sqlite+pysqlite:///{settings.SQLITE_PATH}"
+        f"sqlite+pysqlite:///{settings.sqlite_target}"
         if settings.DB_BACKEND == "sqlite"
         else f"oracle+oracledb://{settings.ORACLE_USER}@{settings.ORACLE_DSN}"
     )

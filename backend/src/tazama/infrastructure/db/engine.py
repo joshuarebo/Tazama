@@ -29,9 +29,10 @@ IN_MEMORY = ":memory:"
 
 
 def _sqlite_url(settings: Settings) -> str:
-    if settings.SQLITE_PATH in (IN_MEMORY, "", None):
+    target = settings.sqlite_target
+    if target == IN_MEMORY:
         return "sqlite+pysqlite://"
-    path = Path(settings.SQLITE_PATH).expanduser()
+    path = Path(target)
     path.parent.mkdir(parents=True, exist_ok=True)
     return f"sqlite+pysqlite:///{path.as_posix()}"
 
@@ -113,7 +114,7 @@ _ENGINES: dict[tuple[str, str], Engine] = {}
 def get_engine(settings: Settings | None = None) -> Engine:
     """Process-wide engine for the configured backend."""
     settings = settings or get_settings()
-    target = settings.SQLITE_PATH if settings.DB_BACKEND == "sqlite" else settings.ORACLE_DSN
+    target = settings.sqlite_target if settings.DB_BACKEND == "sqlite" else settings.ORACLE_DSN
     key = (settings.DB_BACKEND, target)
     engine = _ENGINES.get(key)
     if engine is None:
