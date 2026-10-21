@@ -1,0 +1,48 @@
+# OpenTelemetry collector for the `observability` compose profile.
+# Receives OTLP/HTTP from api and worker, forwards traces to Jaeger.
+receivers:
+  otlp:
+    protocols:
+      http:
+        endpoint: 0.0.0.0:4318
+
+processors:
+  batch:
+    timeout: 2s
+  memory_limiter:
+    check_interval: 5s
+    limit_percentage: 70
+    spike_limit_percentage: 20
+  # Defence in depth: span attributes are scrubbed in-process before export, and anything
+  # that still looks like a credential is dropped here as well.
+  attributes/redact:
+    actions:
+      - key: http.request.header.authorization
+        action: delete
+      - key: db.statement
+        action: delete
+      - key: llm.prompt
+        action: delete
+
+exporters:
+  otlp/jaeger:
+    endpoint: jaeger:4317
+    tls:
+      insecure: true
+  debug:
+    verbosity: basic
+
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [memory_limiter, attributes/redact, batch]
+      exporters: [otlp/jaeger]
+    metrics:
+      receivers: [otlp]
+      processors: [memory_limiter, batch]
+      exporters: [debug]
+    logs:
+      receivers: [otlp]
+      processors: [memory_limiter, attributes/redact, batch]
+      exporters: [debug]

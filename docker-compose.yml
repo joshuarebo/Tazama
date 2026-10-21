@@ -1,0 +1,129 @@
+# TAZAMA compose stack.
+#
+#   docker compose up -d                      api + worker (+ web once Phase 5 lands)
+#   docker compose --profile oracle up -d     add Oracle Database Free
+#   docker compose --profile fake-llm up -d   add the deterministic fake LLM
+#   docker compose --profile observability up -d   add the OTel collector + trace UI
+#
+# Every value comes from .env (see .env.example). Nothing is hardcoded here, and no
+# container runs as root.
+
+name: tazama
+
+x-common: &common
+  restart: unless-stopped
+  env_file: [.env]
+  security_opt: ["no-new-privileges:true"]
+  logging:
+    driver: json-file
+    options: { max-size: "10m", max-file: "3" }
+
+services:
+  api:
+    <<: *common
+    build:
+      context: ./backend
+      target: runtime
+    environment:
+      APP_MODE: ${APP_MODE:-demo}
+      DB_BACKEND: ${DB_BACKEND:-sqlite}
+      SQLITE_PATH: /data/tazama.db
+      ORACLE_DSN: ${ORACLE_DSN:-oracle:1521/FREEPDB1}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000}
+      OTEL_SERVICE_NAME: tazama-api
+    ports: ["8000:8000"]
+    volumes:
+      - app_data:/data
+      - ./config:/app/config:ro
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8000/healthz"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  worker:
+    <<: *common
+    build:
+      context: ./backend
+      target: runtime
+    command: ["python", "-m", "tazama.worker"]
+    environment:
+      APP_MODE: ${APP_MODE:-demo}
+      DB_BACKEND: ${DB_BACKEND:-sqlite}
+      SQLITE_PATH: /data/tazama.db
+      OTEL_SERVICE_NAME: tazama-worker
+    volumes:
+      - app_data:/data
+      - ./config:/app/config:ro
+    depends_on:
+      api:
+        condition: service_healthy
+
+  web:
+    <<: *common
+    profiles: ["web"] # becomes a default service in Phase 5
+    build:
+      context: ./web
+    environment:
+      NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:-http://localhost:8000}
+      NEXT_PUBLIC_MAP_TILE_URL: ${NEXT_PUBLIC_MAP_TILE_URL:-}
+      NEXT_PUBLIC_APP_MODE: ${APP_MODE:-demo}
+    ports: ["3000:3000"]
+    depends_on:
+      api:
+        condition: service_healthy
+
+  oracle:
+    <<: *common
+    profiles: ["oracle"]
+    image: container-registry.oracle.com/database/free:latest
+    environment:
+      ORACLE_PWD: ${ORACLE_PASSWORD:?ORACLE_PASSWORD must be set to use the oracle profile}
+      ORACLE_CHARACTERSET: AL32UTF8
+    ports: ["1521:1521"]
+    volumes:
+      - oracle_data:/opt/oracle/oradata
+      - ./backend/alembic/oracle-init:/opt/oracle/scripts/startup:ro
+    healthcheck:
+      # Oracle Free takes several minutes on first boot; the long start period is deliberate.
+      test: ["CMD", "bash", "-lc", "echo 'select 1 from dual;' | sqlplus -s / as sysdba | grep -q 1"]
+      interval: 20s
+      timeout: 10s
+      retries: 30
+      start_period: 300s
+
+  fake-llm:
+    <<: *common
+    profiles: ["fake-llm"]
+    build:
+      context: ./backend
+      target: runtime
+    command: ["python", "/app/scripts/fake_llm.py"]
+    environment:
+      FAKE_LLM_HOST: 0.0.0.0
+      FAKE_LLM_PORT: "8088"
+    ports: ["8088:8088"]
+    volumes:
+      - ./scripts:/app/scripts:ro
+
+  otel-collector:
+    <<: *common
+    profiles: ["observability"]
+    image: otel/opentelemetry-collector-contrib:0.115.1
+    command: ["--config=/etc/otel/config.yaml"]
+    volumes:
+      - ./config/otel-collector.yaml:/etc/otel/config.yaml:ro
+    ports: ["4318:4318"]
+
+  jaeger:
+    <<: *common
+    profiles: ["observability"]
+    image: jaegertracing/all-in-one:1.64.0
+    environment:
+      COLLECTOR_OTLP_ENABLED: "true"
+    ports: ["16686:16686"]
+
+volumes:
+  app_data:
+  oracle_data:

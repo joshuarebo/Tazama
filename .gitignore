@@ -1,0 +1,66 @@
+# --- secrets / config (NEVER commit) ---
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+wallet/
+secrets/
+
+# --- python ---
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+dist/
+build/
+.hypothesis/
+
+# --- node / next ---
+node_modules/
+.next/
+out/
+*.tsbuildinfo
+.playwright/
+playwright-report/
+test-results/
+blob-report/
+
+# --- data / artifacts (synthetic, regenerable) ---
+*.db
+*.sqlite
+*.sqlite3
+data/
+artifacts/
+models/*.pkl
+models/*.txt
+models/*.joblib
+exports/
+.tazama/
+
+# --- logs / os / editors ---
+*.log
+logs/
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+!.vscode/extensions.json
+
+# --- local tooling ---
+.sbom/
+sbom*.json
+.uv-cache/
+
+# local gate logs
+ci.log
+fmt.log

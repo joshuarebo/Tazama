@@ -1,0 +1,107 @@
+# Human-in-the-loop policy, decision thresholds and AI kill switches.
+#
+# Rules decide; AI recommends; humans approve. Everything a reviewer would want to argue
+# about lives here, not in code, and every decision records the version below.
+version: 1
+updated: 2026-10-21
+owner: network-care-platform
+
+# --------------------------------------------------------------- approvals
+approvals:
+  # action -> who may approve, and whether it can ever be automatic
+  notification_send:
+    required: true
+    roles: [manager, noc_engineer, admin]
+    auto_approve: false
+    reason: a customer-facing message is never sent by a machine alone
+  recovery_execute:
+    required: true
+    roles: [manager, admin]
+    auto_approve: false
+    risk_tiers_requiring_two_approvers: [high]
+    reason: execution is simulated in v1; approval discipline is built now
+  incident_close:
+    required: true
+    roles: [noc_engineer, manager, admin]
+    auto_approve: false
+  report_send_now:
+    required: true
+    roles: [admin]
+    auto_approve: false
+
+# ------------------------------------------------------------- confidence
+confidence:
+  site_identification_min: 0.60 # below this, route the complaint to a human
+  diagnosis_min: 0.55 # below this, show the deterministic explanation and flag for review
+  classification_min: 0.50 # below this, fall back to the rules-based category
+  notification_min: 0.70 # below this, do not propose a proactive notification
+
+# ------------------------------------------------------------ correlation
+correlation:
+  spatial_radius_km: 3.0
+  time_window_minutes: 45
+  min_complaints_for_incident: 3
+  min_complaints_per_1k_subs: 0.8
+  topology_shared_upstream: true
+  alarm_storm_collapse_minutes: 10
+  flapping_min_transitions: 4
+  maintenance_suppression: true
+  silent_sufferer_kpi_threshold: 0.75 # degraded KPI with no complaints still raises an incident
+
+# ----------------------------------------------------------- prioritisation
+prioritisation:
+  weights:
+    affected_subscribers: 0.35
+    enterprise_accounts: 0.25
+    duration_minutes: 0.20
+    sla_risk: 0.15
+    repeat_complaints: 0.05
+  p1_threshold: 0.80
+  p2_threshold: 0.60
+  p3_threshold: 0.35
+
+# ------------------------------------------------------------ notification
+notification:
+  quiet_hours: { start: "21:00", end: "06:30", tz: Africa/Nairobi }
+  max_per_subscriber_per_day: 2
+  max_per_incident: 1
+  dedupe_window_hours: 12
+  respect_opt_out: true
+  templates_only: true # the LLM may fill slots; it never writes free text to a customer
+  storm_guard:
+    max_notifications_per_minute: 200
+    breach_action: pause_and_alert
+
+# ------------------------------------------------------------ verification
+verification:
+  quiet_period_minutes: 30
+  kpi_recovery_ratio: 0.95
+  require_alarm_clear: true
+  reopen_on_failure: true
+
+# --------------------------------------------------------------- ai limits
+ai:
+  diagnosis_agent:
+    max_steps: 6
+    max_tokens: 12000
+    max_wall_clock_s: 45
+    tool_permission_tiers:
+      kpi_query: read
+      alarm_query: read
+      topology_lookup: read
+      similar_incidents: read
+      maintenance_lookup: read
+      runbook_execute: never
+      send_message: never
+      network_command: never
+  knowledge_assistant:
+    max_steps: 3
+    require_citations: true
+    refuse_without_evidence: true
+    exclude_expired_docs: true
+  reporter:
+    numeric_grounding_required: true
+    fallback: deterministic_template
+  rag:
+    grader_min_score: 0.6
+    max_context_chunks: 8

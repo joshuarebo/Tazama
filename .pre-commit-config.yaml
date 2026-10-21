@@ -1,0 +1,75 @@
+# Pre-commit is the first security gate: nothing reaches a commit unformatted,
+# untyped, boundary-breaking or carrying a secret.
+#   pre-commit install         (once)
+#   pre-commit run --all-files
+default_language_version:
+  python: python3.12
+fail_fast: false
+
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: check-added-large-files
+        args: ["--maxkb=512"]
+      - id: check-case-conflict
+      - id: check-merge-conflict
+      - id: check-yaml
+        args: ["--allow-multiple-documents"]
+      - id: check-json
+        exclude: ^(web/tsconfig.json|.*\.vscode/.*)$
+      - id: check-toml
+      - id: detect-private-key
+      - id: end-of-file-fixer
+      - id: trailing-whitespace
+      - id: mixed-line-ending
+        args: ["--fix=lf"]
+      - id: no-commit-to-branch
+        args: ["--branch", "main"]
+
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.8.6
+    hooks:
+      - id: ruff
+        args: ["--fix", "--exit-non-zero-on-fix"]
+        files: ^(backend|scripts)/
+      - id: ruff-format
+        files: ^(backend|scripts)/
+
+  - repo: https://github.com/pre-commit/mirrors-mypy
+    rev: v1.14.1
+    hooks:
+      - id: mypy
+        files: ^backend/src/
+        args: ["--config-file=backend/pyproject.toml"]
+        additional_dependencies:
+          - pydantic>=2.9
+          - pydantic-settings>=2.6
+          - types-pyyaml
+
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.23.1
+    hooks:
+      - id: gitleaks
+
+  - repo: local
+    hooks:
+      - id: no-env-committed
+        name: refuse to commit an environment file
+        entry: python scripts/scan_secrets.py
+        language: system
+        pass_filenames: false
+
+      - id: module-boundaries
+        name: module boundaries (import-linter)
+        entry: uv run --project backend lint-imports --config backend/pyproject.toml
+        language: system
+        pass_filenames: false
+        files: ^backend/src/
+
+      - id: env-example-parity
+        name: settings and .env.example agree
+        entry: uv run --project backend pytest backend/tests/unit/test_env_contract.py -q
+        language: system
+        pass_filenames: false
+        files: ^(backend/src/tazama/core/settings\.py|\.env\.example)$

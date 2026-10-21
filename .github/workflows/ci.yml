@@ -1,0 +1,140 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # CI never reads a .env file: the environment is the contract.
+  TAZAMA_ENV_FILE: ""
+  APP_ENV: local
+  APP_MODE: demo
+  DB_BACKEND: sqlite
+  SQLITE_PATH: ":memory:"
+  PSEUDONYM_SALT: ci-pseudonym-salt-0123456789abcd
+  JWT_SECRET: ci-jwt-secret-value-0123456789abcd
+  NO_COLOR: "1"
+
+jobs:
+  backend:
+    name: backend gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # gitleaks needs history
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: install
+        run: uv sync --project backend --extra dev
+
+      - name: lint (ruff)
+        run: |
+          uv run --project backend ruff check backend/src backend/tests scripts
+          uv run --project backend ruff format --check backend/src backend/tests scripts
+
+      - name: types (mypy)
+        run: uv run --project backend mypy backend/src
+
+      - name: module boundaries (import-linter)
+        working-directory: backend
+        run: uv run lint-imports --config pyproject.toml
+
+      - name: tests + coverage
+        working-directory: backend
+        run: |
+          uv run pytest -m "not integration and not load and not eval_live" \
+            --cov=tazama --cov-report=term-missing:skip-covered --cov-report=xml
+
+      - name: coverage gate (>= 80% on domain/modules/core)
+        run: uv run --project backend python scripts/coverage_gate.py
+
+      - name: evals (fake LLM)
+        working-directory: backend
+        run: uv run pytest -m eval -q
+
+      - name: task-runner parity (make / make.ps1 / mk.py)
+        run: |
+          python scripts/mk.py help
+          make help
+
+      - name: doctor
+        run: uv run --project backend python scripts/doctor.py
+
+      - name: openapi export
+        run: uv run --project backend python scripts/export_openapi.py
+
+      - name: sbom
+        run: uv run --project backend python scripts/sbom.py
+
+      - name: dependency audit
+        continue-on-error: true # advisory: a new CVE must not block an unrelated change
+        run: uv run --project backend pip-audit --strict --progress-spinner off
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: backend-reports
+          path: |
+            backend/coverage.xml
+            artifacts/sbom.json
+            docs/openapi.json
+          if-no-files-found: ignore
+
+  secrets:
+    name: secret scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITLEAKS_ENABLE_UPLOAD_ARTIFACT: "false"
+      - name: fallback scanner (also checks for committed env files)
+        run: python scripts/scan_secrets.py
+
+  frontend:
+    name: frontend gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - name: skip until Phase 5
+        id: guard
+        run: |
+          if [ -f web/package.json ]; then echo "present=true" >> "$GITHUB_OUTPUT";
+          else echo "present=false" >> "$GITHUB_OUTPUT"; echo "web/ not scaffolded yet"; fi
+      - uses: actions/setup-node@v4
+        if: steps.guard.outputs.present == 'true'
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - if: steps.guard.outputs.present == 'true'
+        working-directory: web
+        run: npm ci
+      - if: steps.guard.outputs.present == 'true'
+        working-directory: web
+        run: npm run lint
+      - if: steps.guard.outputs.present == 'true'
+        working-directory: web
+        run: npm run typecheck
+      - if: steps.guard.outputs.present == 'true'
+        working-directory: web
+        run: npm run test -- --run

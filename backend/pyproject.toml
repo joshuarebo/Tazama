@@ -1,0 +1,222 @@
+[project]
+name = "tazama"
+version = "0.1.0"
+description = "TAZAMA — Smart Optimization Intelligence Platform (synthetic data only)"
+requires-python = ">=3.12,<3.14"
+dependencies = [
+    # web / api
+    "fastapi>=0.115,<0.120",
+    "uvicorn[standard]>=0.32,<0.36",
+    "pydantic>=2.9,<3",
+    "pydantic-settings>=2.6,<3",
+    "python-multipart>=0.0.18",
+    "httpx>=0.27,<0.29",
+    "orjson>=3.10",
+    "pyyaml>=6.0",
+    "jinja2>=3.1",
+    # Windows ships no IANA tz database; DISPLAY_TZ=Africa/Nairobi must resolve everywhere.
+    "tzdata>=2024.2",
+    # data
+    "sqlalchemy>=2.0.36,<2.1",
+    "alembic>=1.14,<2",
+    "oracledb>=2.5,<4",
+    "sqlglot>=25.30",
+    # security
+    "pyjwt>=2.9,<3",
+    "bcrypt>=4.2",
+    # observability
+    "opentelemetry-api>=1.29",
+    "opentelemetry-sdk>=1.29",
+    "opentelemetry-exporter-otlp-proto-http>=1.29",
+    "opentelemetry-instrumentation-fastapi>=0.50b0",
+]
+
+[project.optional-dependencies]
+ml = [
+    "numpy>=2.0",
+    "pandas>=2.2",
+    "scipy>=1.14",
+    "scikit-learn>=1.5",
+    "lightgbm>=4.5",
+    "statsmodels>=0.14",
+    "shap>=0.46",
+]
+dev = [
+    "pytest>=8.3",
+    "pytest-cov>=6.0",
+    "pytest-asyncio>=0.24",
+    "hypothesis>=6.112",
+    "ruff>=0.8",
+    "mypy>=1.13",
+    "import-linter>=2.1",
+    "types-pyyaml",
+    "detect-secrets>=1.5",
+    "pip-audit>=2.7",
+    "locust>=2.32",
+    "freezegun>=1.5",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/tazama"]
+
+# ----------------------------------------------------------------- ruff
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = [
+    "E", "W",     # pycodestyle
+    "F",          # pyflakes
+    "I",          # isort
+    "B",          # bugbear
+    "C4",         # comprehensions
+    "UP",         # pyupgrade
+    "S",          # bandit (security)
+    "DTZ",        # flake8-datetimez — naive datetimes are a bug here
+    "T20",        # no print in library code
+    "RET", "SIM", "PTH", "ARG", "TRY", "RUF",
+]
+ignore = [
+    "TRY003",  # long messages in raise are fine; our errors are user facing
+    "TRY400",  # logger.error in except is deliberate in adapters
+    "S101",    # assert: allowed (tests, and internal invariants)
+    "B008",    # FastAPI Depends() in defaults is the framework idiom
+    "RUF012",  # ClassVar annotations not required on pydantic models
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S", "ARG", "PTH", "T20", "DTZ"]
+"src/tazama/infrastructure/db/oracle/**" = ["S608"]  # reviewed, bound-param only; see module docstring
+
+[tool.ruff.lint.flake8-bugbear]
+extend-immutable-calls = ["fastapi.Depends", "fastapi.Query", "fastapi.Path", "fastapi.Header"]
+
+# ----------------------------------------------------------------- mypy
+[tool.mypy]
+python_version = "3.12"
+mypy_path = "src"
+packages = ["tazama"]
+warn_unused_configs = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+no_implicit_optional = true
+check_untyped_defs = true
+disallow_untyped_defs = true
+plugins = []
+
+# strict where the PRD demands it
+[[tool.mypy.overrides]]
+module = ["tazama.domain.*", "tazama.modules.*", "tazama.core.*"]
+strict = true
+disallow_any_generics = true
+warn_return_any = true
+
+[[tool.mypy.overrides]]
+module = [
+    "lightgbm.*", "shap.*", "statsmodels.*", "sklearn.*", "umap.*",
+    "locust.*", "oracledb.*", "sqlglot.*", "detect_secrets.*",
+]
+ignore_missing_imports = true
+
+# ---------------------------------------------------------------- pytest
+[tool.pytest.ini_options]
+minversion = "8.0"
+testpaths = ["tests"]
+pythonpath = ["src"]
+asyncio_mode = "auto"
+addopts = "-q --strict-markers --strict-config"
+markers = [
+    "integration: needs a real Oracle container (skipped when DB_BACKEND != oracle)",
+    "contract: adapter contract tests, parametrised over mock and live_stub",
+    "scenario: runs against the seeded ground-truth scenarios",
+    "security: security control tests (SQL guard, injection, authz, masking)",
+    "eval: LLM/agent eval suite (fake LLM)",
+    "eval_live: real-Qwen evals; skipped unless LLM_BASE_URL is set",
+    "slow: takes more than a few seconds",
+    "load: load test, not part of make ci",
+]
+filterwarnings = ["error::DeprecationWarning:tazama.*"]
+
+# -------------------------------------------------------------- coverage
+[tool.coverage.run]
+source = ["tazama"]
+branch = true
+omit = ["*/tests/*", "*/__main__.py"]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "if TYPE_CHECKING:",
+    "raise NotImplementedError",
+    "@abstractmethod",
+    "\\.\\.\\.",
+]
+
+# ---------------------------------------------------- import-linter (module boundaries)
+[tool.importlinter]
+root_packages = ["tazama"]
+include_external_packages = true
+
+[[tool.importlinter.contracts]]
+name = "domain is pure (no I/O, no infrastructure, no framework)"
+type = "forbidden"
+source_modules = ["tazama.domain"]
+forbidden_modules = [
+    "tazama.infrastructure", "tazama.api", "tazama.worker", "tazama.ai", "tazama.modules",
+    "sqlalchemy", "fastapi", "httpx", "oracledb",
+]
+
+[[tool.importlinter.contracts]]
+name = "modules never import each other (ports + events only)"
+type = "independence"
+modules = [
+    "tazama.modules.ingestion",
+    "tazama.modules.complaints",
+    "tazama.modules.enrichment",
+    "tazama.modules.site_identification",
+    "tazama.modules.correlation",
+    "tazama.modules.incidents",
+    "tazama.modules.impact",
+    "tazama.modules.prioritisation",
+    "tazama.modules.routing",
+    "tazama.modules.recovery",
+    "tazama.modules.verification",
+    "tazama.modules.notification",
+    "tazama.modules.audit",
+    "tazama.modules.reporting",
+    "tazama.modules.discovery",
+    "tazama.modules.insights",
+]
+
+[[tool.importlinter.contracts]]
+name = "modules do not reach into infrastructure or the api layer"
+type = "forbidden"
+source_modules = ["tazama.modules"]
+forbidden_modules = ["tazama.infrastructure", "tazama.api", "tazama.worker"]
+
+[[tool.importlinter.contracts]]
+name = "only the gateway talks to a model endpoint"
+type = "forbidden"
+source_modules = [
+    "tazama.modules", "tazama.ai.agents", "tazama.ai.rag", "tazama.ai.ml", "tazama.api",
+]
+forbidden_modules = ["httpx"]
+
+[[tool.importlinter.contracts]]
+name = "layered architecture"
+type = "layers"
+layers = [
+    "tazama.api | tazama.worker",
+    "tazama.ai",
+    "tazama.modules",
+    "tazama.infrastructure",
+    "tazama.core",
+    "tazama.domain",
+]
+exhaustive = false
