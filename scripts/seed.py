@@ -24,13 +24,14 @@ def main() -> int:
     parser.add_argument("--report", action="store_true", help="print the scenario ground-truth table")
     args = parser.parse_args()
 
-    try:
-        from tazama.infrastructure.db.seed import run_seed
-    except ModuleNotFoundError:
-        print("seed generator lands in Phase 1 (infrastructure/db/seed.py).")  # noqa: T201
-        return 0
+    from tazama.infrastructure.db.seed import SeedAborted, run_seed
 
-    summary = run_seed(seed=args.seed, days=args.days, reset=args.reset)
+    try:
+        summary = run_seed(seed=args.seed, days=args.days, reset=args.reset)
+    except SeedAborted as refusal:
+        # An operator should see the sentence that tells them what to do, not a traceback.
+        print(f"seed aborted: {refusal}")  # noqa: T201
+        return 2
     print(summary.render(include_scenarios=args.report))  # noqa: T201
     return 0
 

@@ -1,0 +1,276 @@
+# Source mappings: the ONLY place that knows real table and column names.
+#
+# Demo mode maps the canonical model onto the seeded tables (identity mappings).
+# Live mode maps it onto the operator's real Oracle objects. Switching between them is a
+# configuration change and never a code change (PRD section 7).
+#
+# How to switch to LIVE:
+#   1. Fill the SOURCE_ORACLE_* variables in .env and set APP_MODE=live.
+#   2. Replace the `live:` blocks below with the real schema/table/column names.
+#   3. Run `make doctor` — it validates every mapping and prints coverage before anything
+#      queries a real system. A mapping that references an unknown canonical column, or
+#      omits a required one, fails startup rather than silently returning NULLs.
+#
+# Field reference
+#   source          schema-qualified source object (live) or canonical table (demo)
+#   columns         canonical_column: source_column
+#   types           canonical_column: expected type (string|int|float|bool|timestamp|json)
+#                   used by validation to catch schema drift early
+#   join_keys       how this entity joins to others
+#   timezone        timezone of the SOURCE timestamps; everything is converted to UTC on read
+#   filters         SQL-safe predicate fragments applied to every read (bound, never formatted)
+#   required        canonical columns that must exist; missing ones fail validation
+version: 2
+updated: 2026-10-21
+default_timezone: Africa/Nairobi # live sources commonly store local time; we store UTC
+
+entities:
+  # ------------------------------------------------------------------ network
+  site:
+    demo:
+      source: site
+      columns: {} # identity mapping
+    live:
+      source: NETWORK.DIM_SITE
+      columns:
+        id: SITE_CODE
+        name: SITE_NAME
+        region: REGION_NAME
+        county: COUNTY_NAME
+        lat: LATITUDE
+        lon: LONGITUDE
+        site_type: SITE_CATEGORY
+        power_backup: HAS_GENERATOR
+        parent_node_id: TRANSMISSION_LINK_ID
+        commissioned_at: ON_AIR_DATE
+      types:
+        id: string
+        lat: float
+        lon: float
+        commissioned_at: timestamp
+      filters: ["STATUS = 'ACTIVE'"]
+    required: [id, name, region, lat, lon]
+    join_keys:
+      cell: { local: id, remote: site_id }
+      topology_node: { local: parent_node_id, remote: id }
+
+  cell:
+    demo:
+      source: cell
+      columns: {}
+    live:
+      source: NETWORK.DIM_CELL
+      columns:
+        id: CELL_ID
+        site_id: SITE_CODE
+        name: CELL_NAME
+        tech: RAT
+        band: FREQ_BAND
+        azimuth_deg: AZIMUTH
+        subscribers_est: SUBS_COUNT
+        status: CELL_STATUS
+        region: REGION_NAME
+        lat: LATITUDE
+        lon: LONGITUDE
+      types: { id: string, site_id: string, subscribers_est: int }
+      filters: ["CELL_STATUS <> 'DECOMMISSIONED'"]
+    required: [id, site_id, tech, region]
+    join_keys:
+      site: { local: site_id, remote: id }
+      kpi_cell: { local: id, remote: cell_id }
+
+  topology_node:
+    demo: { source: topology_node, columns: {} }
+    live:
+      source: NETWORK.DIM_NETWORK_ELEMENT
+      columns:
+        id: NE_ID
+        kind: NE_TYPE
+        name: NE_NAME
+        region: REGION_NAME
+        capacity_mbps: CAPACITY_MBPS
+        redundant: IS_REDUNDANT
+    required: [id, kind, name]
+
+  topology_edge:
+    demo: { source: topology_edge, columns: {} }
+    live:
+      source: NETWORK.NE_PARENT_CHILD
+      columns:
+        parent_id: PARENT_NE_ID
+        child_id: CHILD_NE_ID
+        parent_kind: PARENT_TYPE
+        child_kind: CHILD_TYPE
+        relation: LINK_ROLE
+    required: [parent_id, child_id]
+
+  alarm:
+    demo: { source: alarm, columns: {} }
+    live:
+      source: NMS.FM_ALARM_HISTORY
+      columns:
+        id: ALARM_UID
+        node_id: NE_ID
+        node_kind: NE_TYPE
+        cell_id: CELL_ID
+        site_id: SITE_CODE
+        alarm_type: ALARM_NAME
+        severity: PERCEIVED_SEVERITY
+        raised_at: EVENT_TIME
+        cleared_at: CLEAR_TIME
+        source: SYSTEM_ID
+        external_ref: ALARM_NUMBER
+      types: { raised_at: timestamp, cleared_at: timestamp }
+      timezone: Africa/Nairobi
+      # Time-bounded by default: an unbounded read of alarm history is never acceptable.
+      filters: ["EVENT_TIME >= :window_start", "EVENT_TIME < :window_end"]
+    required: [id, node_id, alarm_type, severity, raised_at]
+    join_keys:
+      cell: { local: cell_id, remote: id }
+
+  kpi_cell:
+    demo: { source: kpi_cell, columns: {} }
+    live:
+      # Hourly and 15-minute counters usually live in different aggregates; the reader
+      # selects by `granularity`, so both are declared here.
+      source: PM.AGG_CELL_KPI_HOURLY
+      source_fine: PM.AGG_CELL_KPI_15MIN
+      columns:
+        cell_id: CELL_ID
+        site_id: SITE_CODE
+        region: REGION_NAME
+        bucket_start: PERIOD_START_TIME
+        availability_pct: CELL_AVAILABILITY
+        rrc_setup_success_pct: RRC_CONN_SETUP_SR
+        erab_setup_success_pct: ERAB_SETUP_SR
+        drop_rate_pct: ERAB_DROP_RATE
+        prb_utilisation_pct: PRB_UTIL_DL
+        dl_throughput_mbps: USER_DL_THP_MBPS
+        ul_throughput_mbps: USER_UL_THP_MBPS
+        latency_ms: RTT_MS
+        active_users: RRC_CONN_AVG
+        sinr_db: SINR_AVG
+      types: { bucket_start: timestamp, availability_pct: float }
+      timezone: Africa/Nairobi
+      filters:
+        ["PERIOD_START_TIME >= :window_start", "PERIOD_START_TIME < :window_end"]
+    required: [cell_id, bucket_start, availability_pct]
+    join_keys:
+      cell: { local: cell_id, remote: id }
+
+  maintenance_window:
+    demo: { source: maintenance_window, columns: {} }
+    live:
+      source: CHANGE.PLANNED_WORKS
+      columns:
+        id: CHANGE_ID
+        node_id: TARGET_NE_ID
+        node_kind: TARGET_NE_TYPE
+        region: REGION_NAME
+        starts_at: PLANNED_START
+        ends_at: PLANNED_END
+        description: WORK_SUMMARY
+        external_ref: CHANGE_NUMBER
+        approved_by: APPROVER
+      types: { starts_at: timestamp, ends_at: timestamp }
+      timezone: Africa/Nairobi
+      filters: ["STATE IN ('APPROVED', 'IN_PROGRESS', 'COMPLETED')"]
+    required: [id, node_id, starts_at, ends_at]
+
+  # ---------------------------------------------------------------- customers
+  subscriber:
+    demo: { source: subscriber, columns: {} }
+    live:
+      # The live reader pseudonymises MSISDN at the boundary (ADR 0008): the canonical
+      # `id` is the HMAC token, never the number. `msisdn_source` names the column to
+      # hash; it is read, hashed and discarded in the same expression.
+      source: CRM.V_SUBSCRIBER_SNAPSHOT
+      msisdn_source: MSISDN
+      columns:
+        region: HOME_REGION
+        home_cell_id: HOME_CELL_ID
+        last_cell_id: LAST_SERVING_CELL
+        last_seen_at: LAST_ACTIVITY_TS
+        segment: CUSTOMER_SEGMENT
+        is_enterprise: IS_CORPORATE
+        enterprise_ref: ACCOUNT_NUMBER
+        sla_tier: SLA_CLASS
+        opt_out: MARKETING_OPT_OUT
+        is_roaming: ROAMING_FLAG
+      types: { last_seen_at: timestamp }
+      timezone: Africa/Nairobi
+    required: [region]
+    pii_source_columns: [MSISDN, ACCOUNT_NUMBER]
+
+  complaint:
+    demo: { source: complaint, columns: {} }
+    live:
+      source: CARE.V_COMPLAINT_FEED
+      msisdn_source: CUST_MSISDN
+      columns:
+        id: TICKET_ID
+        received_at: CREATED_TS
+        source_ts: CUSTOMER_EVENT_TS
+        channel: CONTACT_CHANNEL
+        language: DETECTED_LANG
+        raw_text: DESCRIPTION
+        stated_location: REPORTED_AREA
+        region: REGION_NAME
+        cell_id: SERVING_CELL_ID
+        site_id: SITE_CODE
+        category: ISSUE_TYPE
+        external_ref: TICKET_NUMBER
+      types: { received_at: timestamp, source_ts: timestamp }
+      timezone: Africa/Nairobi
+      filters: ["CREATED_TS >= :window_start", "CREATED_TS < :window_end"]
+    required: [id, received_at, channel, raw_text]
+    join_keys:
+      cell: { local: cell_id, remote: id }
+      subscriber: { local: subscriber_id, remote: id }
+    pii_source_columns: [CUST_MSISDN, DESCRIPTION, REPORTED_AREA]
+
+  care_call:
+    demo: { source: care_call, columns: {} }
+    live:
+      source: CARE.V_CALL_DETAIL
+      msisdn_source: CALLING_NUMBER
+      columns:
+        id: INTERACTION_ID
+        started_at: CALL_START_TS
+        duration_s: TALK_TIME_SEC
+        reason_code: DISPOSITION_CODE
+        reason_text: DISPOSITION_DESC
+        channel: QUEUE_TYPE
+        agent_ref: AGENT_ID
+        region: REGION_NAME
+        cell_id: LAST_SERVING_CELL
+        complaint_id: LINKED_TICKET_ID
+      types: { started_at: timestamp, duration_s: int }
+      timezone: Africa/Nairobi
+      filters: ["CALL_START_TS >= :window_start", "CALL_START_TS < :window_end"]
+    required: [id, started_at, reason_code]
+    pii_source_columns: [CALLING_NUMBER, AGENT_ID]
+
+# App-owned tables: TAZAMA is the system of record, so there is no live source. They are
+# listed so validation can tell "no mapping needed" apart from "mapping forgotten".
+app_owned:
+  - incident
+  - incident_link
+  - diagnosis
+  - case_record
+  - runbook
+  - recovery_action
+  - verification
+  - notification
+  - knowledge_doc
+  - prediction
+  - model_registry
+  - eval_run
+  - audit_log
+  - outbox_event
+  - scheduled_report
+  - report_delivery
+  - saved_query
+  - query_audit
+  - ground_truth
+  - seed_run

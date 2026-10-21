@@ -117,6 +117,34 @@ def repo_root() -> Path:
 
 
 @pytest.fixture
+def db_engine(settings):
+    """A fresh in-memory database with the canonical schema.
+
+    `create_all` rather than Alembic: migrations are proven by their own round-trip test,
+    and tests should not pay for 30 `CREATE TABLE` migrations on every function.
+    """
+    from tazama.infrastructure.db import Base, get_engine, reset_engine_cache
+
+    reset_engine_cache()
+    engine = get_engine(settings)
+    Base.metadata.create_all(engine)
+    yield engine
+    Base.metadata.drop_all(engine)
+    reset_engine_cache()
+
+
+@pytest.fixture
+def db_session(db_engine):
+    from tazama.infrastructure.db import session_factory
+
+    session = session_factory(db_engine)()
+    try:
+        yield session
+    finally:
+        session.close()
+
+
+@pytest.fixture
 def fake_llm_app():
     """The deterministic fake LLM as an in-process ASGI app (no server, no sockets)."""
     import importlib.util
