@@ -1,0 +1,203 @@
+# Runbook catalogue — recovery module.
+#
+# These are documents, not code. A proposal picks one, a human approves it, and the
+# recovery module *simulates* the outcome: there is no execution path in v1 and no port
+# that could become one (see backend/src/tazama/modules/recovery/ports.py).
+#
+# Every entry carries a rollback. A change with no declared way back is refused by the
+# loader, because "we'll work it out if it goes wrong" is how a 20-minute incident becomes
+# a four-hour one.
+#
+# Risk tiers drive approval: `high` requires two different approvers
+# (config/policies.yaml -> approvals.recovery_execute.risk_tiers_requiring_two_approvers).
+#
+# Expected KPI movements are MODELLED expectations for the verification module to check
+# afterwards, not predictions. KPI names and thresholds are UNVERIFIED (see
+# docs/data-catalog.md) and must be reconciled with the operator's own counter definitions.
+version: 1
+updated: 2026-10-21
+owner: noc-engineering
+
+runbooks:
+  - id: RBK-CELL-OUTAGE-01
+    title: Restore a single unavailable cell
+    cause: cell_outage
+    risk_tier: medium
+    owner: noc_engineering
+    requires_approval: true
+    estimated_minutes: 45
+    steps:
+      - { action: "Confirm the cell is unavailable in two independent sources (NMS alarm and KPI bucket).", tier: read }
+      - { action: "Check site power and external power-loss alarms for the parent site.", tier: read }
+      - { action: "Verify transport reachability to the parent site before touching the cell.", tier: read }
+      - { action: "Request a remote cell reset through the NMS change queue.", tier: propose }
+      - { action: "Observe two full KPI buckets before declaring recovery.", tier: read }
+      - { action: "If the reset fails twice, raise a field dispatch with the site access details.", tier: propose }
+    rollback:
+      - "Cancel the pending reset request in the NMS change queue."
+      - "Return the cell to its previous administrative state."
+      - "Record in the change log that the cell was left unchanged."
+    expected_effect: >-
+      Availability returns above 99% within two KPI buckets of the reset, and the cell
+      regains its pre-incident accessibility.
+    expected_kpis:
+      - { kpi: availability_pct, direction: improve, target: 99.0 }
+      - { kpi: rrc_setup_success_pct, direction: improve, target: 98.0 }
+
+  - id: RBK-TRANSMISSION-01
+    title: Recover a failed transmission link
+    cause: transmission_link_failure
+    risk_tier: high
+    owner: transmission_engineering
+    requires_approval: true
+    estimated_minutes: 120
+    steps:
+      - { action: "Identify the failed link and enumerate every child site from the topology.", tier: read }
+      - { action: "Confirm whether the link is protected and check the state of the protection path.", tier: read }
+      - { action: "Check for a concurrent planned change on the link or its aggregation node.", tier: read }
+      - { action: "Escalate to the transmission team with affected site and subscriber counts.", tier: propose }
+      - { action: "Propose traffic steering onto the protection path if it is healthy.", tier: propose }
+      - { action: "Hold any customer notification until the protection state is confirmed.", tier: propose }
+    rollback:
+      - "Revert any proposed traffic steering to the original path."
+      - "Return the protection path to standby."
+      - "Re-open the link's alarm suppression so the real state is visible again."
+    expected_effect: >-
+      Every child site regains availability, the link alarm clears and stays clear for a
+      full quiet period, and complaints on the affected sites stop.
+    expected_kpis:
+      - { kpi: availability_pct, direction: improve, target: 99.0, note: "across all child cells" }
+      - { kpi: drop_rate_pct, direction: reduce, target: 1.0 }
+
+  - id: RBK-CONGESTION-01
+    title: Relieve busy-hour congestion on a cell
+    cause: congestion
+    risk_tier: low
+    owner: ran_optimisation
+    requires_approval: false
+    estimated_minutes: 60
+    steps:
+      - { action: "Confirm PRB utilisation above threshold for at least three consecutive buckets.", tier: read }
+      - { action: "Confirm the throughput loss tracks utilisation rather than a coverage hole.", tier: read }
+      - { action: "Identify the local busy hour in Africa/Nairobi, not UTC.", tier: read }
+      - { action: "Propose a load-balancing parameter change or an additional carrier.", tier: propose }
+      - { action: "Schedule the change outside the local busy hour.", tier: propose }
+    rollback:
+      - "Restore the previous load-balancing parameter set from the change record."
+      - "Remove the additional carrier if it was activated."
+    expected_effect: >-
+      PRB utilisation falls below 80% during the local busy hour and downlink throughput
+      recovers to the pre-incident baseline.
+    expected_kpis:
+      - { kpi: prb_utilisation_pct, direction: reduce, target: 80.0 }
+      - { kpi: dl_throughput_mbps, direction: improve, target: 3.0 }
+
+  - id: RBK-POWER-01
+    title: Handle a site power failure
+    cause: power_failure
+    risk_tier: medium
+    owner: field_operations
+    requires_approval: true
+    estimated_minutes: 180
+    steps:
+      - { action: "Correlate the external power-loss alarm with the site's battery backup state.", tier: read }
+      - { action: "Estimate remaining autonomy from the site's backup configuration.", tier: read }
+      - { action: "Check whether the outage is site-local or a grid event across the region.", tier: read }
+      - { action: "Propose a generator dispatch if autonomy is under two hours and impact is material.", tier: propose }
+      - { action: "Notify affected enterprise accounts through the approved template only.", tier: propose }
+    rollback:
+      - "Stand down the proposed generator dispatch."
+      - "Return the site to mains monitoring only and note the decision in the change log."
+    expected_effect: >-
+      The site returns to mains power or generator supply, and availability recovers across
+      all child cells within one hour of supply being restored.
+    expected_kpis:
+      - { kpi: availability_pct, direction: improve, target: 99.0 }
+
+  - id: RBK-CONFIG-01
+    title: Roll back a damaging configuration change
+    cause: configuration_change
+    risk_tier: high
+    owner: ran_engineering
+    requires_approval: true
+    estimated_minutes: 90
+    steps:
+      - { action: "Correlate the degradation start with the change-log window to the minute.", tier: read }
+      - { action: "Identify the exact parameter set that changed and its previous values.", tier: read }
+      - { action: "Confirm no other change overlaps the same elements in the same window.", tier: read }
+      - { action: "Obtain change-board approval for an emergency rollback.", tier: propose }
+      - { action: "Propose the rollback and observe two full KPI buckets before declaring recovery.", tier: propose }
+    rollback:
+      - "Re-apply the original parameter set from the change record."
+      - "Escalate to the vendor if the pre-change values do not restore the baseline."
+    expected_effect: >-
+      KPIs return to the pre-change baseline within two buckets of the rollback, and the
+      change record carries the reason the original change was reverted.
+    expected_kpis:
+      - { kpi: rrc_setup_success_pct, direction: improve, target: 98.0 }
+      - { kpi: erab_setup_success_pct, direction: improve, target: 98.0 }
+      - { kpi: drop_rate_pct, direction: reduce, target: 1.0 }
+
+  - id: RBK-MAINTENANCE-01
+    title: Suppress an incident caused by planned maintenance
+    cause: planned_maintenance
+    risk_tier: low
+    owner: change_management
+    requires_approval: false
+    estimated_minutes: 15
+    steps:
+      - { action: "Match the degradation window against the approved maintenance window, in UTC.", tier: read }
+      - { action: "Confirm the affected elements are the ones named in the change record.", tier: read }
+      - { action: "Confirm the impact is no worse than the change record predicted.", tier: read }
+      - { action: "Suppress the incident with the change reference, and send the maintenance template only.", tier: propose }
+      - { action: "Set a reminder to re-check KPIs after the window closes.", tier: propose }
+    rollback:
+      - "Lift the suppression and treat the degradation as a real incident."
+      - "Escalate to the change owner because the impact exceeded what was approved."
+    expected_effect: >-
+      The incident is suppressed with a traceable change reference, no recovery action is
+      proposed, and KPIs return to baseline when the window closes.
+    expected_kpis:
+      - { kpi: availability_pct, direction: improve, target: 99.0, note: "after the window closes" }
+
+  - id: RBK-FLAPPING-01
+    title: Stabilise a flapping alarm source
+    cause: flapping
+    risk_tier: low
+    owner: noc_engineering
+    requires_approval: false
+    estimated_minutes: 30
+    steps:
+      - { action: "Count raise/clear cycles in the last hour; four or more is flapping by policy.", tier: read }
+      - { action: "Confirm there is no sustained KPI impact behind the cycles.", tier: read }
+      - { action: "Confirm complaint volume on the element is at baseline.", tier: read }
+      - { action: "Propose a bounded alarm suppression and open a hardware task.", tier: propose }
+      - { action: "Do not raise a customer-facing incident for flapping alone.", tier: propose }
+    rollback:
+      - "Remove the alarm suppression as soon as the hardware task closes."
+      - "Re-open the incident if KPI impact appears after the suppression."
+    expected_effect: >-
+      Alarm cycles stop being treated as separate incidents, the hardware task is tracked,
+      and no customer-facing message is sent for an element with no customer impact.
+    expected_kpis:
+      - { kpi: availability_pct, direction: improve, target: 99.0, note: "expected to be unchanged" }
+
+  - id: RBK-NON-NETWORK-01
+    title: Route a non-network complaint surge away from the incident engine
+    cause: non_network
+    risk_tier: low
+    owner: care_operations
+    requires_approval: false
+    estimated_minutes: 20
+    steps:
+      - { action: "Confirm the complaint categories are billing or bundle related, not network.", tier: read }
+      - { action: "Confirm KPIs and alarms are healthy across the affected region.", tier: read }
+      - { action: "Check for a recent tariff or bundle catalogue change as the trigger.", tier: read }
+      - { action: "Route the surge to the billing operations queue; do not open a network incident.", tier: propose }
+    rollback:
+      - "Return the surge to the network queue if KPIs later show a real degradation."
+    expected_effect: >-
+      No network incident is opened, the surge is owned by billing operations, and complaint
+      volume returns to baseline once the billing issue is addressed.
+    expected_kpis:
+      - { kpi: availability_pct, direction: improve, target: 99.0, note: "expected to be unchanged" }

@@ -6,6 +6,8 @@ A configuration problem stops the process with one readable error, by design.
 
 from __future__ import annotations
 
+import asyncio
+import contextlib
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
@@ -54,11 +56,31 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
             "version": __version__,
         },
     )
-    yield
-    _log.info("api_stop")
+
+    # Tail the outbox so connected browsers see live updates. Read-only and best-effort:
+    # if it fails, the UI is merely not live, and a refresh still shows the truth.
+    tail: asyncio.Task[object] | None = None
+    if app.state.stream_tail_enabled:
+        from tazama.api.stream_feed import run_tail
+
+        tail = asyncio.create_task(run_tail(settings), name="sse-outbox-tail")
+
+    try:
+        yield
+    finally:
+        if tail is not None:
+            tail.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await tail
+        _log.info("api_stop")
 
 
-def create_app(settings: Settings | None = None) -> FastAPI:
+def create_app(settings: Settings | None = None, *, stream_tail: bool = True) -> FastAPI:
+    """Build the application.
+
+    `stream_tail=False` skips the background outbox tail — the test client would otherwise
+    start a poller for every app it constructs.
+    """
     settings = settings or get_settings()
     configure_logging(
         level=settings.LOG_LEVEL,
@@ -81,6 +103,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         lifespan=_lifespan,
     )
     app.state.settings = settings
+    app.state.stream_tail_enabled = stream_tail
 
     # Innermost listed last: correlation id wraps everything.
     app.add_middleware(RateLimitMiddleware, limit=settings.RATE_LIMIT_PER_MIN)

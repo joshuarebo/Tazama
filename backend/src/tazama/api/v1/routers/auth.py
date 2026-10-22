@@ -12,8 +12,9 @@ from typing import Annotated
 from fastapi import APIRouter
 from pydantic import BaseModel, Field
 
-from tazama.api.deps import ClockDep, PrincipalDep, SettingsDep
+from tazama.api.deps import PrincipalDep, SettingsDep
 from tazama.core.auth import authenticate_dev_user, issue_token
+from tazama.core.clock import SystemClock
 from tazama.core.errors import BadRequest
 from tazama.core.logging import get_logger
 from tazama.core.security import PERMISSIONS
@@ -47,7 +48,6 @@ class WhoAmI(BaseModel):
 async def login(
     body: LoginRequest,
     settings: SettingsDep,
-    clock: ClockDep,
 ) -> TokenResponse:
     if settings.AUTH_MODE != "dev":
         raise BadRequest("This deployment uses OIDC. Start the flow at /api/v1/auth/oidc.")
@@ -56,10 +56,13 @@ async def login(
         body.password,
         dev_users=settings.dev_users,
     )
+    # Deliberately the wall clock, not the injected domain clock: a JWT's `exp` is checked
+    # against real time by every verifier, so minting against anything else would issue
+    # credentials that are already expired (or valid far too long).
     token = issue_token(
         principal,
         secret=settings.JWT_SECRET.get_secret_value(),
-        clock=clock,
+        clock=SystemClock(),
         ttl_s=settings.JWT_TTL_S,
     )
     _log.info("login_ok", extra={"subject": principal.subject, "role": principal.role})

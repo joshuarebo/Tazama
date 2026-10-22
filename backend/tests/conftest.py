@@ -77,7 +77,17 @@ def pseudonymiser():
 def app(settings):
     from tazama.api.app import create_app
 
-    return create_app(settings)
+    # No background outbox tail in tests: the stream feed has its own tests.
+    built = create_app(settings, stream_tail=False)
+
+    # Pin the clock the whole request graph sees. Without this, policy decisions that
+    # depend on the time of day — quiet hours, most obviously — would pass or fail
+    # depending on when the suite happens to run.
+    from tazama.api.deps import clock_dep
+    from tazama.core.clock import FixedClock
+
+    built.dependency_overrides[clock_dep] = lambda: FixedClock(FROZEN_NOW)
+    return built
 
 
 @pytest.fixture

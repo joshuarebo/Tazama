@@ -14,9 +14,10 @@ def test_healthz_never_touches_a_dependency(client) -> None:
     assert body["time"].endswith("+00:00")  # stored/reported in UTC
 
 
-def test_readyz_lists_every_probe(client) -> None:
+def test_readyz_lists_every_probe(client, db_engine) -> None:
+    # The schema has to exist: a missing outbox table means migrations were not run, and
+    # the probe is right to call that down rather than skipped.
     response = client.get("/readyz")
-    # Nothing is "down" in Phase 0: unimplemented subsystems report "skipped".
     assert response.status_code == 200
     body = response.json()
     names = {check["name"] for check in body["checks"]}
@@ -24,9 +25,21 @@ def test_readyz_lists_every_probe(client) -> None:
     assert body["status"] in {"ready", "degraded"}
     config_check = next(c for c in body["checks"] if c["name"] == "config")
     assert config_check["status"] == "ok"
+    database_check = next(c for c in body["checks"] if c["name"] == "database")
+    assert database_check["status"] == "ok"
 
 
-def test_readyz_reports_degraded_without_an_llm(client) -> None:
+def test_readyz_is_not_ready_when_the_schema_is_missing(client) -> None:
+    """No `db_engine` fixture here, so there are no tables: readiness must say so."""
+    response = client.get("/readyz")
+    assert response.status_code == 503
+    body = response.json()
+    assert body["status"] == "not-ready"
+    outbox = next(c for c in body["checks"] if c["name"] == "outbox")
+    assert outbox["status"] == "down"
+
+
+def test_readyz_reports_degraded_without_an_llm(client, db_engine) -> None:
     body = client.get("/readyz").json()
     llm = next(c for c in body["checks"] if c["name"] == "llm")
     assert llm["status"] == "degraded"
@@ -59,7 +72,7 @@ def test_openapi_is_published(client) -> None:
 
 
 @pytest.mark.parametrize("path", ["/healthz", "/readyz", "/api/v1/meta"])
-def test_public_endpoints_need_no_token(client, path: str) -> None:
+def test_public_endpoints_need_no_token(client, db_engine, path: str) -> None:
     assert client.get(path).status_code in (200, 503)
 
 

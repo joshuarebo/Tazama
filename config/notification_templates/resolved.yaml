@@ -1,0 +1,16 @@
+# "It is fixed" message, sent only after verification has passed.
+#
+# Verification (KPI recovery + alarms cleared + a quiet period with no new complaints) is
+# what earns the right to send this. Sending it on an alarm clear alone is how a customer
+# is told the problem is over while it is still happening.
+id: resolved
+version: "1"
+channel: sms
+approval_required: true
+max_length: 160
+max_parts: 1
+description: Incident verified as resolved; closure confirmation to affected subscribers.
+required_slots: [service, area, resolved_at]
+languages:
+  en: "The {{service}} fault in {{area}} is fixed as of {{resolved_at}}. Thank you for your patience."
+  sw: "Hitilafu ya {{service}} katika {{area}} imerekebishwa kuanzia {{resolved_at}}. Asante kwa uvumilivu wako."
