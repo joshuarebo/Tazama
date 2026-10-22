@@ -206,7 +206,7 @@ def test_the_subscriber_figure_is_documented_as_an_estimate(policies) -> None:
 
 
 def test_cells_come_from_the_incident_links_when_not_supplied(policies) -> None:
-    service, parts = build(
+    service, _ = build(
         policies,
         cells=[cell("CELL-A", "SITE-1", 500), cell("CELL-B", "SITE-1", 700)],
         incident_cells={"INC-1": ("CELL-A", "CELL-B")},
@@ -414,7 +414,7 @@ def test_a_degradation_nobody_reported_is_flagged_as_a_silent_sufferer(policies)
 def test_impact_calculated_is_published_with_the_payload(policies) -> None:
     service, parts = build(policies, cells=[cell("CELL-A", "SITE-1", 1000)])
 
-    impact = service.calculate(target(cell_ids=("CELL-A",)))
+    service.calculate(target(cell_ids=("CELL-A",)))
     events = parts["publisher"].of_type(EventType.IMPACT_CALCULATED)
 
     assert len(events) == 1

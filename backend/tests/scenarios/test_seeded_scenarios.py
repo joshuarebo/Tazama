@@ -758,11 +758,7 @@ def test_scenario_11_late_events_are_judged_at_their_event_time(
             )
             .order_by(m.Complaint.id),
         ).all()
-    late_rows = {
-        str(row[0]): (row[1], row[2])
-        for row in candidates
-        if row[1] - row[2] >= min_lag
-    }
+    late_rows = {str(row[0]): (row[1], row[2]) for row in candidates if row[1] - row[2] >= min_lag}
     assert late_rows, "the seed must contain late complaints for this to mean anything"
 
     judged = {
@@ -843,13 +839,18 @@ def test_the_confusion_matrix_is_printed_for_the_record(
     run: PipelineRun,
     facts: dict[str, Fact],
 ) -> None:
-    """Not an assertion about quality — it puts the measured numbers in the test log."""
+    """Not an assertion about quality — it puts the measured numbers in the test log.
+
+    Run with `-s` to read it. The gate test above repeats the same matrix in its failure
+    message, so a red CI run is diagnosable without re-running anything.
+    """
     score = _score(run, facts)
     report = _confusion(run, facts, score)
+    print(report)  # tests may print; ruff's T20 is disabled under tests/ for exactly this
+
     assert "precision" in report
-    # The matrix is attached to a deliberate, always-true assertion message so that `-rA`
-    # and a failing CI run both surface it without a `print` (ruff T20 forbids print).
-    assert score["precision"] >= 0.0, report
+    assert 0.0 <= score["precision"] <= 1.0
+    assert 0.0 <= score["recall"] <= 1.0
 
 
 def test_maintenance_suppression_is_total(run: PipelineRun) -> None:

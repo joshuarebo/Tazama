@@ -488,7 +488,7 @@ def test_complaints_close_in_space_and_time_cluster_into_one_incident(policies) 
         make_complaint("CMP-3", "CELL-A", minute=20),
         make_complaint("CMP-FAR", "CELL-FAR", minute=12),
     ]
-    service, parts = build_service(
+    service, _ = build_service(
         policies,
         kpis=FakeKpiReader([make_breach("CELL-A", "SITE-1")]),
         complaints=FakeComplaintReader(
@@ -573,7 +573,7 @@ def _link_topology() -> tuple[FakeTopologyReader, FakeCellDirectory]:
 
 def test_clusters_sharing_an_upstream_element_become_one_incident(policies) -> None:
     topology, cells = _link_topology()
-    service, parts = build_service(
+    service, _ = build_service(
         policies,
         kpis=FakeKpiReader(
             [
@@ -620,7 +620,7 @@ def test_sharing_a_link_without_evidence_about_the_link_does_not_merge(policies)
         descendants={
             "SITE-1": ("CELL-A", "CELL-A2"),
             "SITE-2": ("CELL-B", "CELL-B2"),
-            "LINK-1": tuple(f"CELL-{i}" for i in range(20)) + ("CELL-A", "CELL-B"),
+            "LINK-1": (*(f"CELL-{i}" for i in range(20)), "CELL-A", "CELL-B"),
         },
     )
     service, _ = build_service(
@@ -682,7 +682,7 @@ def test_a_site_whose_cells_all_degrade_is_rooted_at_the_site(policies) -> None:
 
 def test_an_approved_maintenance_window_suppresses_the_candidate(policies) -> None:
     site = TopologyNodeInfo(node_id="SITE-1", kind=NodeKind.SITE)
-    service, parts = build_service(
+    service, _ = build_service(
         policies,
         kpis=FakeKpiReader([make_breach("CELL-A", "SITE-1", start_hour=20, end_hour=22)]),
         maintenance=FakeMaintenanceReader(
@@ -897,7 +897,7 @@ def test_a_non_network_complaint_never_raises_a_network_incident(
 
 
 def test_degraded_kpis_with_zero_complaints_still_raise_an_incident(policies) -> None:
-    service, parts = build_service(
+    service, _ = build_service(
         policies,
         kpis=FakeKpiReader(
             [
@@ -1003,7 +1003,7 @@ def test_complaints_sharing_a_dedupe_key_count_once(policies) -> None:
     )
     incidents = FakeIncidentRepository(seeded=[existing])
     links = FakeLinkRepository()
-    service, parts = build_service(policies, incidents=incidents, links=links)
+    service, _ = build_service(policies, incidents=incidents, links=links)
 
     storm = [
         make_complaint(
@@ -1070,7 +1070,7 @@ def test_a_late_complaint_for_a_closed_incident_asks_for_a_reopen(policies) -> N
         window=window(6, 9),
     )
     incidents = FakeIncidentRepository(seeded=[closed])
-    service, parts = build_service(policies, incidents=incidents)
+    service, _ = build_service(policies, incidents=incidents)
 
     outcome = service.correlate_complaint(
         make_complaint("CMP-LATE", "CELL-A", hour=21, source_ts=at(8, 30)),
@@ -1092,7 +1092,7 @@ def test_a_complaint_outside_every_incident_window_does_not_attach(policies) -> 
         cause="cell_outage",
         window=window(1, 2),
     )
-    service, parts = build_service(policies, incidents=FakeIncidentRepository(seeded=[far]))
+    service, _ = build_service(policies, incidents=FakeIncidentRepository(seeded=[far]))
 
     outcome = service.correlate_complaint(make_complaint("CMP-1", "CELL-A", hour=20))
 

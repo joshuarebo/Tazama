@@ -54,6 +54,17 @@ APPROVAL_ACTION = "recovery_execute"
 
 ENTITY_TYPE = "recovery_action"
 
+#: States from which an approval is still meaningful. `SIMULATED` is included because
+#: looking at the modelled outcome before approving is the intended workflow — the first
+#: version refused it, which made "simulate, then approve" impossible.
+APPROVABLE_STATUSES: frozenset[RecoveryStatus] = frozenset(
+    {
+        RecoveryStatus.PROPOSED,
+        RecoveryStatus.AWAITING_SECOND_APPROVAL,
+        RecoveryStatus.SIMULATED,
+    },
+)
+
 #: How confident the *simulation* is, by risk tier. A high-risk change has more ways to
 #: surprise you, so its modelled outcome is claimed less strongly.
 _SIMULATION_CONFIDENCE: dict[RiskTier, float] = {
@@ -193,10 +204,7 @@ class RecoveryService:
                 f"(policy allows: {', '.join(rule.roles)}).",
             )
         proposal = self._require(action_id)
-        if proposal.status not in (
-            RecoveryStatus.PROPOSED,
-            RecoveryStatus.AWAITING_SECOND_APPROVAL,
-        ):
+        if proposal.status not in APPROVABLE_STATUSES:
             raise Conflict(
                 f"Recovery action {action_id} is {proposal.status} and can no longer be approved.",
             )
@@ -397,6 +405,14 @@ class RecoveryService:
         """
         budget = self._policies.ai.diagnosis_agent
         return tuple(tool for tool in NEVER_TIER_TOOLS if budget.tier(tool) == "never")
+
+    def get(self, action_id: str) -> RecoveryProposal:
+        """One proposal, or `NotFound`.
+
+        Public because callers that need to act on a proposal (the API proposing a
+        rollback, for instance) hold an id, not the object.
+        """
+        return self._require(action_id)
 
     def _require(self, action_id: str) -> RecoveryProposal:
         proposal = self._repo.get(action_id)

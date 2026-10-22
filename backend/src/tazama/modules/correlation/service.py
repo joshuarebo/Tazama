@@ -259,7 +259,11 @@ class CorrelationService:
                 action="correlate_complaint",
                 entity_type="complaint",
                 entity_id=observation.complaint_id,
-                inputs={"category": str(observation.category), "cell_id": observation.cell_id},
+                inputs={
+                    "category": str(observation.category),
+                    "cell_id": observation.cell_id,
+                    **_timing(observation),
+                },
             )
 
         span = timedelta(minutes=policy.time_window_minutes)
@@ -287,11 +291,7 @@ class CorrelationService:
                 action="correlate_complaint",
                 entity_type="complaint",
                 entity_id=observation.complaint_id,
-                inputs={
-                    "cell_id": observation.cell_id,
-                    "event_time": observation.event_time.isoformat(),
-                    "received_at": observation.received_at.isoformat(),
-                },
+                inputs={"cell_id": observation.cell_id, **_timing(observation)},
             )
 
         breach, alarm_rows = corroboration
@@ -319,6 +319,7 @@ class CorrelationService:
                     "distinct_complaints": cluster.distinct_count,
                     "raw_complaints": cluster.raw_count,
                     "per_1k_subs": round(cluster.per_1k_subs, 3),
+                    **_timing(observation),
                 },
             )
 
@@ -847,9 +848,7 @@ class CorrelationService:
             entity_id=observation.complaint_id,
             inputs={
                 "incident_id": incident.incident_id,
-                "event_time": observation.event_time.isoformat(),
-                "received_at": observation.received_at.isoformat(),
-                "lag_seconds": observation.lag.total_seconds(),
+                **_timing(observation),
                 "dedupe_key": observation.dedupe_token,
                 "first_of_dedupe_key": first_of_key,
                 "incident_status": incident.status,
@@ -1252,6 +1251,19 @@ class CorrelationService:
 
 
 # --------------------------------------------------------------------- helpers
+
+
+def _timing(observation: ComplaintObservation) -> dict[str, Any]:
+    """Event time, ingestion time and the lag between them.
+
+    Recorded on *every* complaint decision, whatever the outcome: the late/out-of-order
+    edge case is only auditable if each row says which clock the engine reasoned on.
+    """
+    return {
+        "event_time": observation.event_time.isoformat(),
+        "received_at": observation.received_at.isoformat(),
+        "lag_seconds": observation.lag.total_seconds(),
+    }
 
 
 def _threshold(kpi: KpiName) -> float:
