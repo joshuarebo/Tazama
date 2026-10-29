@@ -53,6 +53,13 @@ _log = get_logger(__name__)
 #: random token would make a leak harder to spot in a log after the fact.
 CANARY = "TAZAMA-CANARY"
 
+#: Everything that is not a letter or a digit, for canary comparison. A plain substring
+#: test is trivially defeated: `tazama canary`, `TAZAMA_CANARY` and `T-A-Z-A-M-A C-A-N-A-R-Y`
+#: all leak the marker while failing `CANARY in text`, and a model paraphrasing its own
+#: system prompt reformats casing and punctuation as a matter of course. Both sides are
+#: flattened to letters and digits before comparing.
+_NON_ALNUM = re.compile(r"[^a-z0-9]+")
+
 #: How a model is told to answer. Short on purpose — a long instruction block is a long
 #: thing for injected text to argue with.
 _JSON_RULE = (
@@ -72,7 +79,15 @@ _INJECTION_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
     ("canary-probe", re.compile(re.escape(CANARY), re.IGNORECASE)),
     ("tool-smuggling", re.compile(r"(?i)\b(call|invoke|use)\s+the\s+\w+\s+tool\b")),
     ("exfiltration", re.compile(r"(?i)\b(send|post|email|upload)\b.{0,32}\b(to|at)\b.{0,32}http")),
+    # Text trying to close the block it is wrapped in, so the rest of it reads as
+    # instructions rather than data.
+    ("delimiter-escape", re.compile(r"(?i)</?\s*untrusted")),
 )
+
+#: Any attempt to write the delimiter itself. Neutralised rather than flagged-and-passed:
+#: unlike "ignore previous instructions", which is only words, this one would actually
+#: change the structure of the prompt.
+_DELIMITER_ESCAPE = re.compile(r"(?i)<\s*/?\s*untrusted\s*>?")
 
 
 class LlmUnavailable(UpstreamUnavailable):
@@ -203,6 +218,12 @@ class Capabilities:
     models: tuple[str, ...] = ()
     tool_calling: bool = False
     note: str = ""
+
+
+def leaks_canary(*texts: str) -> bool:
+    """True when any of `texts` contains the canary in a recognisable form."""
+    needle = _NON_ALNUM.sub("", CANARY.lower())
+    return any(needle in _NON_ALNUM.sub("", (text or "").lower()) for text in texts)
 
 
 def detect_injection(text: str) -> tuple[str, ...]:
@@ -399,9 +420,15 @@ class LlmGateway:
         self._breaker.record_success()
         self._budget.charge(usage)
 
+        # Tool calls are model output as much as the message body is: a name and an
+        # argument blob the model wrote. Checking only `raw` would leave the obvious
+        # channel open — put the canary, or an MSISDN, in a tool argument instead of in
+        # the text.
+        tool_text = json.dumps(tool_calls, default=str) if tool_calls else ""
+
         # The canary check runs before anything looks at the content. A leaked system
         # prompt means the response is compromised, whatever else it says.
-        if CANARY in raw:
+        if leaks_canary(raw, tool_text):
             _log.error("canary_leak", extra={"task": task, "model": model})
             raise CanaryLeak(
                 "the model echoed the canary token: the system prompt leaked, so this "
@@ -410,6 +437,8 @@ class LlmGateway:
 
         try:
             assert_clean_output(raw)
+            if tool_text:
+                assert_clean_output(tool_text)
         except OutputContainsIdentifier as error:
             _log.error("output_identifier", extra={"task": task})
             return self._degraded(
@@ -486,20 +515,47 @@ class LlmGateway:
         )
 
     def _user_prompt(self, body: str, untrusted: str, schema: type[StrictModel]) -> str:
-        parts = [body.strip()]
-        if untrusted:
-            parts.append(f"<untrusted>\n{untrusted}\n</untrusted>")
-        parts.append(
+        """Assemble the prompt so the untrusted block cannot escape or crowd out the rules.
+
+        Two separate problems, both solved by building the trusted parts first:
+
+        * **Escape.** Text containing `</untrusted>` would close the block early and the
+          remainder would read as instructions. The sequence is neutralised before
+          wrapping — detection alone is not enough here, because unlike "ignore previous
+          instructions" this one changes the prompt's *structure* rather than arguing with
+          it.
+        * **Truncation.** Cutting the assembled prompt at a character limit removes
+          whatever happens to be last, which is the schema and the rules. A prompt whose
+          rules were truncated is a prompt with no rules, so the untrusted text is fitted
+          into the room that is left instead.
+        """
+        trusted = [
+            body.strip(),
             "Return JSON matching this schema:\n"
             + json.dumps(schema.model_json_schema(), separators=(",", ":")),
-        )
-        prompt = "\n\n".join(parts)
+        ]
         limit = self._settings.LLM_MAX_PROMPT_CHARS
-        if len(prompt) > limit:
-            # Truncate the untrusted block, never the instructions: a prompt whose rules
-            # were cut off is a prompt with no rules.
-            prompt = prompt[:limit] + "\n[...truncated]"
-        return prompt
+
+        if not untrusted:
+            return "\n\n".join(trusted)
+
+        safe = _DELIMITER_ESCAPE.sub("[delimiter removed]", untrusted)
+        wrapper = "<untrusted>\n{}\n</untrusted>"
+        overhead = len("\n\n".join([*trusted, wrapper.format("")]))
+        room = limit - overhead
+        if room < 200:
+            # No usable room for customer text. Send the instructions alone rather than a
+            # prompt with no rules; the caller still gets either a valid answer or a
+            # documented degradation.
+            _log.warning(
+                "untrusted_block_dropped",
+                extra={"limit": limit, "overhead": overhead},
+            )
+            return "\n\n".join(trusted)
+        if len(safe) > room:
+            safe = safe[:room] + "\n[...truncated]"
+
+        return "\n\n".join([trusted[0], wrapper.format(safe), trusted[1]])
 
     def _post(
         self,
@@ -606,8 +662,15 @@ class LlmGateway:
         except LlmUnavailable as error:
             return None, True, f"repair attempt failed: {error}"
 
-        if CANARY in retry_raw:
+        if leaks_canary(retry_raw):
             raise CanaryLeak("the model echoed the canary token during the repair attempt")
+        try:
+            # The repair attempt is a second generation, so it gets the same outbound
+            # check. Without this, "return JSON matching the schema" was a route around
+            # the identifier filter.
+            assert_clean_output(retry_raw)
+        except OutputContainsIdentifier as error:
+            return None, True, f"repair attempt returned an identifier: {error}"
         second = _validate(retry_raw, schema)
         if second is not None:
             return second, True, "repaired after one invalid response"
