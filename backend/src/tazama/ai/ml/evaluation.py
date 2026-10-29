@@ -71,6 +71,18 @@ class DetectionMetrics:
     false_negatives: int
     flagged: int
     labelled: int
+    rows: int = 0
+
+    @property
+    def flag_rate(self) -> float:
+        """Share of all rows the detector flagged.
+
+        The operational companion to precision: it answers "will this drown whoever is on
+        shift?", which is a question the label set can answer honestly even when precision
+        cannot — a genuine degradation outside a labelled window hurts precision while
+        telling you nothing about alert volume.
+        """
+        return 0.0 if self.rows <= 0 else self.flagged / self.rows
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -82,6 +94,8 @@ class DetectionMetrics:
             "false_negatives": self.false_negatives,
             "flagged": self.flagged,
             "labelled": self.labelled,
+            "rows": self.rows,
+            "flag_rate": round(self.flag_rate, 6),
         }
 
 
@@ -210,6 +224,7 @@ def detection_metrics(flagged: Sequence[bool], labelled: Sequence[bool]) -> Dete
         false_positives=fp,
         false_negatives=fn,
         flagged=int(pred.sum()),
+        rows=int(pred.size),
         labelled=int(truth.sum()),
     )
 

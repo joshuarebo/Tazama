@@ -645,6 +645,24 @@ def _matches(left: Any, right: Any) -> bool:
     )
 
 
+def _indeterminate(left: Any, right: Any) -> bool:
+    """True when the two series cannot discriminate a match from a mismatch.
+
+    `_matches` is written for the question "is this feature a reproduction of something it
+    must not be", where "cannot tell" has to answer False — a guess would be a false
+    alarm. The re-derivation check below asks the *opposite* question, "is this feature
+    really the shifted column it claims to be", where False means "leak". Reusing
+    `_matches` for both means an undiscriminating comparison — a KPI counter that is flat
+    across the whole window, or a column with almost no overlap — reads as leakage and
+    fails the gate on data that is perfectly clean. So the indeterminate case is named
+    once, here, and both callers treat it explicitly.
+    """
+    both = left.notna() & right.notna()
+    if int(both.sum()) < 20:
+        return True
+    return bool(left[both].nunique() < 2 and right[both].nunique() < 2)
+
+
 def _check_future_looking(frame: Any, feature_columns: Sequence[str], target: str) -> None:
     """Reject a feature whose values are an observed column at `ts` or later.
 
@@ -688,11 +706,16 @@ def _check_derived_alignment(frame: Any, feature_columns: Sequence[str]) -> None
                 raise LeakageDetected(
                     f"feature {name!r} has a lag of {k}h: that is the value at t",
                 )
-            if src in sample.columns and not _matches(sample[name], grouped[src].shift(k)):
-                raise LeakageDetected(
-                    f"feature {name!r} does not match {src!r} shifted by {k}h; it was not "
-                    f"built from history strictly before t",
-                )
+            if src in sample.columns:
+                shifted = grouped[src].shift(k)
+                if not _indeterminate(sample[name], shifted) and not _matches(
+                    sample[name],
+                    shifted,
+                ):
+                    raise LeakageDetected(
+                        f"feature {name!r} does not match {src!r} shifted by {k}h; it was "
+                        f"not built from history strictly before t",
+                    )
             continue
         roll = _ROLL_RE.match(name)
         if not roll:
@@ -703,7 +726,7 @@ def _check_derived_alignment(frame: Any, feature_columns: Sequence[str]) -> None
         correct = grouped[src].transform(
             lambda s, w=w: s.shift(1).rolling(w, min_periods=1).mean(),
         )
-        if _matches(sample[name], correct):
+        if _matches(sample[name], correct) or _indeterminate(sample[name], correct):
             continue
         including = grouped[src].transform(lambda s, w=w: s.rolling(w, min_periods=1).mean())
         if _matches(sample[name], including):

@@ -76,7 +76,14 @@ def _chunks(values: Sequence[str], size: int = IN_CHUNK) -> Iterator[Sequence[st
 
 
 class _SqlAdapter:
-    """Shared plumbing: run a statement on the caller's session, or on a connection."""
+    """Shared plumbing: run a statement on the caller's session, or on a fresh one.
+
+    Both branches use a `Session`, deliberately. A Core `Connection` executing
+    `select(SomeMappedClass)` returns the *columns* rather than the mapped object, so
+    `row[0]` is the first column's value and every `_entry(row[0])` downstream reads
+    attributes off a string. That failure only appears on the engine-only path — the
+    training CLI's path — which is exactly where it is least likely to be noticed.
+    """
 
     __slots__ = ("_engine", "_session")
 
@@ -87,8 +94,8 @@ class _SqlAdapter:
     def _rows(self, statement: Select[Any]) -> Sequence[Any]:
         if self._session is not None:
             return self._session.execute(statement).all()
-        with (self._engine or get_engine()).connect() as connection:
-            return connection.execute(statement).all()
+        with session_factory(self._engine or get_engine())() as session:
+            return session.execute(statement).all()
 
 
 class _SqlWriter(_SqlAdapter):

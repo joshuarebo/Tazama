@@ -52,6 +52,12 @@ DEFAULT_Z_THRESHOLD = 3.5
 #: detector falls back to a coarser bin (hour of day, then the whole cell).
 MIN_BIN_SAMPLES = 8
 
+#: Score given to a departure from a bin whose spread is exactly zero. The true z-score is
+#: unbounded there — the history says "this value never varies" and then it varied — so a
+#: finite stand-in is needed. Well above `DEFAULT_Z_THRESHOLD` so it always flags, and
+#: finite so it still sorts and renders.
+FLAT_BIN_SCORE = 50.0
+
 #: Expected share of anomalies for Isolation Forest. The seed's labelled scenarios cover
 #: roughly 1% of cell-hours, so 1% is the honest prior rather than sklearn's "auto".
 DEFAULT_CONTAMINATION = 0.01
@@ -190,6 +196,23 @@ class RobustZScoreDetector:
                 candidate = np.full(len(frame), np.nan)
                 np.divide(values - centre, spread, out=candidate, where=usable)
                 scores.loc[usable, kpi] = candidate[usable]
+
+                # A bin whose spread is exactly zero is not a bin we can ignore. A healthy
+                # availability counter sits pinned at 100.000 for a fortnight, which gives
+                # MAD = 0 — and then a collapse to 12% divides by zero and scores NaN, so
+                # the worst outage in the window is the one thing the detector cannot see.
+                # Any departure from a perfectly constant history is unbounded evidence, so
+                # it is scored at a large finite value, sign preserved, rather than dropped.
+                flat = (
+                    np.isnan(scores[kpi].to_numpy(dtype="float64"))
+                    & ~np.isnan(values)
+                    & ~np.isnan(centre)
+                    & (spread == 0)
+                    & (samples >= self.min_bin_samples)
+                    & (values != centre)
+                )
+                if flat.any():
+                    scores.loc[flat, kpi] = np.sign(values - centre)[flat] * FLAT_BIN_SCORE
         return scores
 
     def detect(self, frame: Any, *, threshold: float | None = None) -> tuple[AnomalyScore, ...]:

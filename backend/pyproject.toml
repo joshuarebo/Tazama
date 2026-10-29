@@ -141,6 +141,7 @@ markers = [
     "security: security control tests (SQL guard, injection, authz, masking)",
     "eval: LLM/agent eval suite (fake LLM)",
     "eval_live: real-Qwen evals; skipped unless LLM_BASE_URL is set",
+    "ml: trains a model; needs the ml extra (numpy, pandas, lightgbm, sklearn, shap)",
     "slow: takes more than a few seconds",
     "load: load test, not part of make ci",
 ]
