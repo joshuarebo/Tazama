@@ -26,6 +26,7 @@ from tazama.api.deps import (
     requires,
 )
 from tazama.core.errors import NotFound
+from tazama.core.logging import scrub_text
 from tazama.domain.value_objects import Channel, Language
 from tazama.infrastructure.db.models import Complaint
 from tazama.modules.ingestion.models import InboundCareCall, InboundComplaint
@@ -118,7 +119,9 @@ class ComplaintPage(BaseModel):
 def _preview(text: str | None, *, keep: int = 80) -> str:
     if not text:
         return ""
-    collapsed = " ".join(text.split())
+    # Complaint text is whatever the customer typed, and customers type numbers
+    # into it constantly. Scrubbed on the way out, never trusted to be clean.
+    collapsed = scrub_text(" ".join(text.split()))
     return collapsed if len(collapsed) <= keep else collapsed[: keep - 1] + "…"
 
 

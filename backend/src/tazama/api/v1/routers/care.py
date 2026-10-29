@@ -28,8 +28,9 @@ from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel, Field
 from sqlalchemy import func, or_, select
 
-from tazama.api.deps import ClockDep, PseudonymiserDep, SessionDep, requires
-from tazama.core.errors import ValidationFailed
+from tazama.api.deps import ClockDep, PseudonymiserDep, SessionDep, SettingsDep, requires
+from tazama.core.errors import NotFound, ValidationFailed
+from tazama.core.logging import scrub_text
 from tazama.domain.value_objects import Msisdn
 from tazama.infrastructure.db.models import (
     CareCall,
@@ -134,7 +135,9 @@ def _iso(value: datetime | None) -> str | None:
 def _preview(text: str | None, *, keep: int = 160) -> str:
     if not text:
         return ""
-    collapsed = " ".join(text.split())
+    # Complaint text is whatever the customer typed, and customers type numbers
+    # into it constantly. Scrubbed on the way out, never trusted to be clean.
+    collapsed = scrub_text(" ".join(text.split()))
     return collapsed if len(collapsed) <= keep else f"{collapsed[:keep]}…"
 
 
@@ -146,13 +149,21 @@ def _preview(text: str | None, *, keep: int = 160) -> str:
 )
 async def sample_tokens(
     session: SessionDep,
+    settings: SettingsDep,
     limit: Annotated[int, Query(ge=1, le=20)] = 8,
 ) -> list[str]:
     """Tokens of subscribers who have actually complained, so the lookup shows something.
 
     Ordered by id so the list is stable between calls — a reviewer clicking the same token
     twice should see the same subscriber.
+
+    **Demo only.** Against real data this is a subscriber-enumeration endpoint: it hands
+    out the identities of the people who complain most, which is the opposite of what
+    pseudonymisation is for. In `live` mode it does not answer at all.
     """
+    if settings.APP_MODE != "demo":
+        raise NotFound("This endpoint exists only in demo mode.")
+
     with_complaints = (
         select(Complaint.subscriber_id)
         .where(Complaint.subscriber_id.is_not(None))
@@ -173,11 +184,21 @@ async def sample_tokens(
 async def lookup(
     body: LookupIn,
     session: SessionDep,
+    settings: SettingsDep,
     pseudonymiser: PseudonymiserDep,
     clock: ClockDep,
 ) -> LookupOut:
     raw = body.identifier.strip()
     notes: list[str] = []
+
+    if raw.startswith("SUB-") and settings.APP_MODE != "demo":
+        # Against real data, accepting a token means an agent can walk the pseudonym space
+        # without ever holding a number — pseudonymisation without that restriction only
+        # changes the shape of the identifier, not who can be looked up.
+        raise ValidationFailed(
+            "Look a subscriber up by their MSISDN. Pseudonym tokens are accepted in "
+            "demo mode only.",
+        )
 
     if raw.startswith("SUB-"):
         token = raw

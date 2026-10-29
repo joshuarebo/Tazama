@@ -258,3 +258,67 @@ def test_samples_only_returns_subscribers_with_complaints(client, auth_headers, 
     response = client.get("/api/v1/care/samples?limit=5", headers=auth_headers("care_agent"))
     assert response.status_code == 200
     assert response.json() == [seeded]
+
+
+def test_a_complaint_preview_is_scrubbed_of_numbers(
+    client,
+    auth_headers,
+    seeded,
+    db_session,
+) -> None:
+    """Customers type numbers into complaint text. The preview must not carry them."""
+    from tazama.infrastructure.db.models import Complaint
+
+    db_session.add(
+        Complaint(
+            id="CMP-CARE-PII",
+            received_at=T0,
+            channel="sms",
+            language="en",
+            raw_text="Call my other line 254722333444 instead, this one is dead",
+            subscriber_id=seeded,
+            region="Nairobi",
+            cell_id="CELL-NRB-001",
+            category="no_service",
+            status="received",
+        ),
+    )
+    db_session.commit()
+
+    response = client.post(
+        "/api/v1/care/lookup",
+        json={"identifier": seeded},
+        headers=auth_headers("care_agent"),
+    )
+    assert "254722333444" not in response.text
+    assert "[MSISDN]" in response.text
+
+
+def test_the_demo_affordances_are_closed_outside_demo_mode(settings, auth_headers, seeded) -> None:
+    """`/samples` is subscriber enumeration against real data, and tokens bypass the number."""
+    from fastapi.testclient import TestClient
+
+    from tazama.api.app import create_app
+    from tazama.api.deps import settings_dep
+
+    live = settings.model_copy(update={"APP_MODE": "live"})
+    app = create_app(live, stream_tail=False)
+    # `settings_dep` reads the cached env-backed settings, which is right in production
+    # and useless here, so the dependency is overridden rather than the factory argument.
+    app.dependency_overrides[settings_dep] = lambda: live
+    with TestClient(app, raise_server_exceptions=False) as client:
+        samples = client.get("/api/v1/care/samples", headers=auth_headers("care_agent"))
+        assert samples.status_code == 404
+        refused = client.post(
+            "/api/v1/care/lookup",
+            json={"identifier": seeded},
+            headers=auth_headers("care_agent"),
+        )
+        assert refused.status_code == 422
+        assert "demo mode only" in refused.json()["detail"]
+        # The real path still works.
+        assert client.post(
+            "/api/v1/care/lookup",
+            json={"identifier": MSISDN},
+            headers=auth_headers("care_agent"),
+        ).status_code == 200

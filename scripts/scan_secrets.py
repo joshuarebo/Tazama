@@ -36,7 +36,10 @@ RULES: list[tuple[str, re.Pattern[str]]] = [
     (
         "assigned-secret",
         re.compile(
-            r"(?i)\b(password|passwd|secret|api[_-]?key|token|salt)\b\s*[:=]\s*"
+            # The `["']?` after the key name matters: in JSON and YAML the key is itself
+            # quoted (`"password": "…"`), and without it the commonest shape a leaked
+            # config file takes was never examined at all.
+            r"(?i)\b(password|passwd|secret|api[_-]?key|token|salt)\b[\"']?\s*[:=]\s*"
             r"[\"']([^\"'\s]{12,})[\"']",
         ),
     ),
@@ -44,8 +47,15 @@ RULES: list[tuple[str, re.Pattern[str]]] = [
 
 PLACEHOLDER = re.compile(
     r"(?i)(change-?me|replace-?with|dev-only|example|placeholder|xxx+|your-|fake|dummy"
-    # `{...}` means an interpolation placeholder, i.e. a template rather than a value.
-    r"|\btest-|\bci-|sample|not-the-|another-secret|hunter2|\$\{|\{|<[a-z_]+>)",
+    r"|\btest-|\bci-|sample|not-the-|another-secret|hunter2"
+    # Interpolation syntax, i.e. a template rather than a value. These are deliberately
+    # *shaped* rather than a bare `{`: exempting anything containing a single brace let a
+    # real credential through whenever it sat inside a one-line JSON object, e.g.
+    # `{"password": "<a real one>"}`, which is precisely the shape a leaked config has.
+    r"|\{\{[a-z0-9_. -]*\}\}"  # {{ jinja }} / {{handlebars}}
+    r"|\$\{[a-z0-9_.:-]+\}"  # ${SHELL_VAR}
+    r"|\{[a-z_][a-z0-9_]*\}"  # {python_format}
+    r"|<[a-z_]+>)",  # <angle-placeholder>
 )
 
 #: Inline suppression for lines that deliberately contain a credential *shape* — the
@@ -93,7 +103,12 @@ def main() -> int:
                 continue
             for name, pattern in RULES:
                 match = pattern.search(line)
-                if match and not PLACEHOLDER.search(match.group(0)):
+                # Test the captured *value* where a rule isolates one, not the whole
+                # match: for `assigned-secret` the match includes the `password:` prefix,
+                # and a placeholder-looking word in that prefix must not excuse the value
+                # beside it.
+                candidate = match.group(2) if match and match.re.groups >= 2 else None
+                if match and not PLACEHOLDER.search(candidate or match.group(0)):
                     findings.append(f"{rel}:{lineno}: {name}")
                     break
 

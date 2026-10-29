@@ -63,7 +63,7 @@ def test_secret_keys_are_redacted_however_nested() -> None:
             "context": {
                 "oracle": {"password": "hunter2", "dsn": "host:1521/PDB"},
                 "teams_webhook_url": WEBHOOK_SHAPED,
-                "api_key": "sk-abcdef123456",
+                "api_key": "sk-abcdef123456",  # pragma: allowlist secret
                 "safe": "keep-me",
             },
         },

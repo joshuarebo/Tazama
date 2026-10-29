@@ -326,7 +326,10 @@ def test_audit_scrubs_identifiers_and_secrets(audit, db_session) -> None:
         entity_type="notification",
         entity_id="NTF-1",
         outcome="proposed",
-        inputs={"msisdn": "254712345678", "api_key": "sk-live-abcdef123456"},
+        inputs={
+            "msisdn": "254712345678",
+            "api_key": "sk-live-abcdef123456",  # pragma: allowlist secret
+        },
     )
     stored = db_session.execute(select(AuditLog)).scalar_one().inputs
     assert "712345678" not in str(stored)

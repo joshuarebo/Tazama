@@ -16,6 +16,7 @@ from sqlalchemy import func, select
 
 from tazama.api.deps import AuditDep, SessionDep, requires
 from tazama.core.errors import NotFound
+from tazama.core.logging import scrub_text
 from tazama.infrastructure.db.models import (
     Alarm,
     Cell,
@@ -533,7 +534,10 @@ async def incident_detail(
                 language=complaint.language,
                 urgency=complaint.urgency,
                 cell_id=complaint.cell_id,
-                text_preview=" ".join((complaint.raw_text or "").split())[:100],
+                # Complaint text is whatever the customer typed, and customers type
+                # their own and each other's numbers into it constantly. Scrubbed on
+                # the way out, not trusted to have been clean on the way in.
+                text_preview=scrub_text(" ".join((complaint.raw_text or "").split()))[:100],
             )
             for complaint in complaints
         ],
@@ -568,7 +572,9 @@ async def incident_detail(
                 "template_id": notification.template_id,
                 "language": notification.language,
                 "proposed_at": _iso(notification.proposed_at),
-                "text_preview": (notification.rendered_text or "")[:120],
+                # Rendered from an approved template, but the slots are filled from
+                # data, so it gets the same treatment.
+                "text_preview": scrub_text(notification.rendered_text or "")[:120],
             }
             for notification in notifications
         ],
