@@ -1,0 +1,151 @@
+/* ============================================================================
+   TAZAMA design tokens — the ONLY place colour, type and spacing are defined.
+   ============================================================================
+
+   ⚠️  TODO — BRAND VALUES ARE PLACEHOLDERS AND UNVERIFIED  ⚠️
+
+   The greens below approximate a Safaricom-like identity so the console looks
+   coherent. They are NOT official brand values and were not taken from a brand
+   guideline. Before any external use:
+
+     1. Replace every `--brand-*` value here with the official palette.
+     2. Put the official logo in `web/public/brand/` (see the README there) and
+        swap the text wordmark in `components/Wordmark.tsx`.
+     3. Re-run the contrast check in `tests/unit/contrast.test.ts` — it fails if
+        any pair drops below WCAG 2.2 AA.
+
+   Nothing else in the app hard-codes a colour, so a brand update is this file
+   plus one logo asset.
+   ============================================================================ */
+
+:root {
+  /* --- brand (PLACEHOLDER, UNVERIFIED) --- */
+  --brand-green: #3fa72f;
+  --brand-green-strong: #2f7d23;
+  --brand-green-soft: #e8f6e4;
+
+  /* --- neutrals --- */
+  --surface: #ffffff;
+  --surface-raised: #f7f8f7;
+  --surface-sunken: #eef0ee;
+  --border: #d7dbd7;
+  --border-strong: #b4bab4;
+  --text: #15201a;
+  --text-muted: #5a6760;
+  --text-inverse: #ffffff;
+
+  /* --- status --- */
+  --danger: #c02525;
+  --danger-soft: #fdeaea;
+  --warn: #9a6207;
+  --warn-soft: #fdf3e2;
+  --info: #15607a;
+  --info-soft: #e5f2f7;
+  --ok: #1f7a3d;
+  --ok-soft: #e6f4ea;
+
+  /* --- priority (P1 loudest) --- */
+  --p1: #c02525;
+  --p2: #9a6207;
+  --p3: #15607a;
+  --p4: #5a6760;
+
+  /* --- shape --- */
+  --radius-sm: 4px;
+  --radius: 8px;
+  --radius-lg: 14px;
+  --shadow-sm: 0 1px 2px rgb(21 32 26 / 8%);
+  --shadow: 0 2px 8px rgb(21 32 26 / 10%);
+  --shadow-lg: 0 8px 24px rgb(21 32 26 / 14%);
+
+  /* --- type --- */
+  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-mono: ui-monospace, "Cascadia Mono", "Segoe UI Mono", Consolas, monospace;
+
+  /* --- spacing scale --- */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+  --space-7: 48px;
+}
+
+/* Dark theme: same tokens, different values. Follows the OS unless the user has
+   chosen a theme explicitly (`data-theme` on <html>). */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --brand-green: #5fd14a;
+    --brand-green-strong: #8ae57a;
+    --brand-green-soft: #16291a;
+
+    --surface: #10150f;
+    --surface-raised: #181f18;
+    --surface-sunken: #0a0e0a;
+    --border: #2b342c;
+    --border-strong: #46524a;
+    --text: #e8efe9;
+    --text-muted: #a3b0a7;
+    --text-inverse: #10150f;
+
+    --danger: #ff7b7b;
+    --danger-soft: #3a1313;
+    --warn: #f0b659;
+    --warn-soft: #3a2a0d;
+    --info: #6ec7e4;
+    --info-soft: #0f2b35;
+    --ok: #6fd98c;
+    --ok-soft: #102a18;
+
+    --p1: #ff7b7b;
+    --p2: #f0b659;
+    --p3: #6ec7e4;
+    --p4: #a3b0a7;
+
+    --shadow-sm: 0 1px 2px rgb(0 0 0 / 45%);
+    --shadow: 0 2px 8px rgb(0 0 0 / 50%);
+    --shadow-lg: 0 8px 24px rgb(0 0 0 / 55%);
+  }
+}
+
+:root[data-theme="dark"] {
+  --brand-green: #5fd14a;
+  --brand-green-strong: #8ae57a;
+  --brand-green-soft: #16291a;
+
+  --surface: #10150f;
+  --surface-raised: #181f18;
+  --surface-sunken: #0a0e0a;
+  --border: #2b342c;
+  --border-strong: #46524a;
+  --text: #e8efe9;
+  --text-muted: #a3b0a7;
+  --text-inverse: #10150f;
+
+  --danger: #ff7b7b;
+  --danger-soft: #3a1313;
+  --warn: #f0b659;
+  --warn-soft: #3a2a0d;
+  --info: #6ec7e4;
+  --info-soft: #0f2b35;
+  --ok: #6fd98c;
+  --ok-soft: #102a18;
+
+  --p1: #ff7b7b;
+  --p2: #f0b659;
+  --p3: #6ec7e4;
+  --p4: #a3b0a7;
+}
+
+/* Respect a user who has asked for less motion. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}

@@ -76,10 +76,20 @@ def build_consumers(
     Pipeline consumers (correlation, impact, notification, verification) attach here as
     their modules land; the milestone auditor applies in every phase.
     """
+    from tazama.worker.pipeline import build_pipeline_consumers
+
     audit = AuditService(sink=SqlAuditSink(engine), clock=clock)
     record = event_auditor(audit)
 
     consumers: dict[EventType, list[Handler]] = {}
+    # The pipeline first, so a step runs before the milestone it produced is audited.
+    for event_type, handlers in build_pipeline_consumers(
+        settings=settings,
+        policies=policies,
+        clock=clock,
+        engine=engine,
+    ).items():
+        consumers.setdefault(event_type, []).extend(handlers)
     for event_type in AUDITED_EVENTS:
         consumers.setdefault(event_type, []).append(record)
 

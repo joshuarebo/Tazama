@@ -47,6 +47,31 @@ def _incident_detected(incident_id: str = "INC-1", **payload: object) -> Inciden
     )
 
 
+@pytest.fixture
+def detected_incident(db_session):
+    """INC-1, persisted.
+
+    The pipeline consumers are wired into the worker now, so an `IncidentDetected` for an
+    incident that does not exist is not a thin test case — it is an inconsistent database,
+    and the impact step is right to refuse it. Tests that exercise delivery therefore have
+    to persist the aggregate the event is about.
+    """
+    db_session.add(
+        Incident(
+            id="INC-1",
+            title="Westlands outage",
+            status="detected",
+            priority="P1",
+            region="Nairobi",
+            detected_at=T0,
+            created_at=T0,
+            updated_at=T0,
+        ),
+    )
+    db_session.commit()
+    return "INC-1"
+
+
 # ------------------------------------------------------------------ wiring
 
 
@@ -73,7 +98,7 @@ def test_the_worker_does_not_reach_into_the_api_layer() -> None:
 
 
 def test_milestone_events_are_audited(
-    settings, policies, frozen_clock, db_engine, db_session
+    settings, policies, frozen_clock, db_engine, db_session, detected_incident
 ) -> None:
     consumers = build_consumers(
         settings=settings,
@@ -84,7 +109,11 @@ def test_milestone_events_are_audited(
     for handler in consumers[EventType.INCIDENT_DETECTED]:
         handler(_incident_detected())
 
-    row = db_session.execute(select(AuditLog)).scalar_one()
+    # The pipeline consumers write their own decision rows, so select the milestone one
+    # rather than asserting it is the only row in the table.
+    row = db_session.execute(
+        select(AuditLog).where(AuditLog.action == "event:IncidentDetected"),
+    ).scalar_one()
     assert row.action == "event:IncidentDetected"
     assert row.entity_id == "INC-1"
     assert row.outcome == "observed"
@@ -129,13 +158,18 @@ def test_worker_runs_bounded_and_exits_cleanly(settings, db_engine) -> None:
     assert run(settings, max_ticks=2) == 0
 
 
-def test_worker_dispatches_what_it_finds(settings, db_engine, frozen_clock, db_session) -> None:
+def test_worker_dispatches_what_it_finds(
+    settings, db_engine, frozen_clock, db_session, detected_incident
+) -> None:
     from tazama.worker.__main__ import run
 
     _publish(db_engine, frozen_clock, _incident_detected())
     assert run(settings, max_ticks=1) == 0
     # The audit consumer ran, which proves the event was delivered.
-    assert db_session.execute(select(AuditLog)).scalar_one().entity_id == "INC-1"
+    milestone = db_session.execute(
+        select(AuditLog).where(AuditLog.action == "event:IncidentDetected"),
+    ).scalar_one()
+    assert milestone.entity_id == "INC-1"
 
 
 def test_worker_refuses_to_start_without_a_database(settings, monkeypatch) -> None:

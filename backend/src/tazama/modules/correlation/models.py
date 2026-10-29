@@ -63,6 +63,12 @@ class ComplaintObservation:
     dedupe_key: str = ""
     subscriber_id: str | None = None
     channel: str = ""
+    #: Enrichment's own verdict, when it has one that the category cannot express. A
+    #: complaint that plainly names the network but no symptom classifies as `other`, and
+    #: the category rule below would then read it as non-network and drop it — which loses
+    #: exactly the vague "mtandao ni mbaya" traffic that makes up much of a real queue.
+    #: `None` means "no verdict", and the category rule decides.
+    network: bool | None = None
 
     @property
     def event_time(self) -> datetime:
@@ -75,6 +81,8 @@ class ComplaintObservation:
 
     @property
     def is_network(self) -> bool:
+        if self.network is not None:
+            return self.network
         return self.category in NETWORK_CATEGORIES
 
     @property

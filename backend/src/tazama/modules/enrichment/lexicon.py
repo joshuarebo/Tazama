@@ -1,0 +1,236 @@
+"""The multilingual vocabulary the rules classifier matches against.
+
+Kenyan care traffic is not monolingual: one message can carry English, Swahili and Sheng in
+the same sentence ("hakuna network, nime-try kupiga lakini bado"). So this is not a
+translation table — it is a set of terms per category in whichever language they occur, and
+a complaint is scored against all of them at once. Code-switching then needs no special
+case: a mixed sentence simply matches terms from more than one language.
+
+**How this list was built.** Not from imagination: the first version scored 39% against the
+seeded complaints, whose true category is known. The misses were read, the vocabulary they
+revealed was added, and the measurement repeated. `tests/unit/test_enrichment.py` pins the
+resulting accuracy, so a future edit that makes the lexicon worse fails the suite.
+
+Terms match on word boundaries over casefolded, accent-stripped text, so "data" does not
+match "update". Multi-word terms are matched as phrases and weigh more, because "no
+network" is a stronger signal than "network" alone.
+
+This is deliberately a *deterministic fallback*: Phase 4's classifier is expected to beat
+it, and the product must keep working when the model is unavailable (CLAUDE.md, AI rules).
+"""
+
+from __future__ import annotations
+
+from tazama.domain.value_objects import ComplaintCategory, Language
+
+#: Category -> terms. Weighting is by term length in words, applied by the scorer.
+CATEGORY_TERMS: dict[ComplaintCategory, tuple[str, ...]] = {
+    ComplaintCategory.NO_SERVICE: (
+        # English
+        "no network", "no service", "no signal", "no coverage", "network down",
+        "network is down", "completely down", "cannot connect", "can't connect",
+        "cannot make calls", "cannot receive", "cannot call", "line is dead",
+        "no bars", "emergency calls only", "not showing network", "no reception",
+        "nothing works", "totally dead", "out of service", "searching for network",
+        # Swahili
+        "hakuna network", "hakuna mtandao", "hakuna huduma", "hakuna signal",
+        "hakuna netu", "mtandao umekata", "network imekata", "haipatikani",
+        "imekufa", "laini imekufa", "haionyeshi network", "haionyeshi mtandao",
+        "simu haipigi", "haipigi", "siwezi kupiga", "siwezi kupokea",
+        "mtandao hamna", "hamna network", "hakuna kabisa", "imezimika",
+        # Sheng / colloquial
+        "network iko down", "network imeenda", "netu iko down", "netu imeenda",
+        "hakuna kitu", "network ishaenda", "hamna netu",
+    ),
+    ComplaintCategory.SLOW_DATA: (
+        "slow data", "slow internet", "data is slow", "internet is slow", "very slow",
+        "too slow", "buffering", "not loading", "pages not loading", "cannot browse",
+        "takes forever", "whatsapp not sending", "videos keep buffering",
+        "browsing is slow", "slow speeds", "speed is bad", "no speed", "crawling",
+        "data iko slow", "data ni slow", "internet ni slow", "intaneti ni mbaya",
+        "intaneti ni slow", "internet ni mbaya", "mtandao ni polepole", "polepole",
+        "inachelewa", "kasi ni mbaya", "kasi iko chini", "haifungui", "hazifunguki",
+        "inachukua muda", "net iko slow", "data imekuwa slow", "netu iko slow",
+        "data ni ndogo sana",
+    ),
+    ComplaintCategory.CALL_DROPS: (
+        "call drops", "calls drop", "dropped call", "call cut", "calls cutting",
+        "cuts after", "disconnects", "keeps disconnecting", "call ends by itself",
+        "have to redial", "redial many times", "calls keep failing", "lose my clients",
+        "cut off mid", "drops every time",
+        "simu inakatika", "simu zinakatika", "inakata", "simu imekatika",
+        "mazungumzo yanakatika", "yanakatika", "inakatika kila", "nikipiga simu",
+        "inakata ghafla", "zinakatika", "call inakatika", "call zinakatika",
+    ),
+    ComplaintCategory.VOICE_QUALITY: (
+        "cannot hear", "can't hear", "voice breaking", "voice is choppy", "choppy",
+        "echo", "crackling", "poor voice", "robotic voice", "one way audio",
+        "voice quality", "call quality", "words are missing", "sounds muffled",
+        "there is delay", "delay when talking", "distorted",
+        "sauti haieleweki", "sauti mbaya", "hasikiki", "sauti inakatakata",
+        "sauti ina delay", "sauti iko chini", "haisikiki vizuri", "sauti inapotea",
+        "tukigongana", "sauti inachelewa",
+    ),
+    ComplaintCategory.NETWORK_CONGESTION: (
+        "network busy", "congested", "congestion", "cannot get through",
+        "all circuits busy", "peak hours", "every evening", "in the evening",
+        "evening it is bad", "network is full", "too many people",
+        "mtandao umejaa", "network imejaa", "netu imejaa", "msongamano",
+        "jioni ni mbaya", "kila jioni", "inashindwa jioni", "ime-block",
+        "imejaa ngori", "haipiti jioni", "inashindwa kupita",
+    ),
+    ComplaintCategory.BILLING: (
+        "charged twice", "wrong charge", "overcharged", "deducted", "lost airtime",
+        "balance wrong", "refund", "billing", "unfair charges", "charged for",
+        "premium messages", "premium sms", "money was taken", "deduction",
+        "charges i do not understand", "wrong deduction", "money gone",
+        "nimetozwa", "natozwa", "pesa imekatwa", "pesa ilikatwa", "salio limepotea",
+        "nimeibiwa salio", "airtime imepotea", "malipo", "nitarudishiwa",
+        "makato", "makato hayaeleweki", "makato mengi", "pesa yangu imeenda",
+        "nitozwe", "ninatozwa kila",
+    ),
+    ComplaintCategory.BUNDLE_CONFUSION: (
+        "bundle", "bundles", "data bundle", "bundle finished", "bundle not working",
+        "bought bundle", "bundle expired", "subscription", "which one is active",
+        "two bundles", "offer is different", "offer kwa app", "wrong bundle",
+        "bundle did not reflect", "did not receive my bundle",
+        "bando", "bundle imeisha", "nimenunua bundle", "bando haifanyi",
+        "bando halijaingia", "ofa", "ofa kwa app", "ofa ni tofauti", "bando langu",
+        "nimelipia bundle", "bundle haijaingia",
+    ),
+    ComplaintCategory.SIM_SWAP: (
+        "sim swap", "sim card", "replace sim", "sim not working", "sim blocked",
+        "new line", "lost sim", "after the swap", "after swap", "new sim",
+        "sim does not register", "registered name", "change the name",
+        "laini", "simkadi", "nimepoteza laini", "laini imeblock", "kubadilisha sim",
+        "nilibadilisha sim", "baada ya swap", "sim mpya", "haijiandikishi",
+        "laini yangu", "badilisheni jina", "thibitisheni kama laini",
+    ),
+}
+
+#: Single words that lean towards a category without being conclusive. They are scored at
+#: a fraction of a phrase's weight (`WEAK_TERM_WEIGHT` in `rules.py`), which is what lets a
+#: complaint phrased in a way nobody anticipated — "downloads stall at the same
+#: percentage", "streaming haifanyi kazi" — still land in the right family instead of
+#: `OTHER`. A lexical classifier cannot enumerate how people write; it can only recognise
+#: the words they reach for.
+WEAK_TERMS: dict[ComplaintCategory, tuple[str, ...]] = {
+    ComplaintCategory.NO_SERVICE: (
+        "dead", "nothing", "zero", "imekufa", "hamna", "hakuna", "searching",
+        "unreachable", "unavailable",
+    ),
+    ComplaintCategory.SLOW_DATA: (
+        "slow", "slowly", "stall", "stalls", "buffering", "buffers", "streaming",
+        "download", "downloads", "upload", "speed", "speeds", "loading", "browse",
+        "browsing", "video", "videos", "whatsapp", "forever", "painfully",
+        "inasimama", "polepole", "kasi", "intaneti", "haifunguki", "inachelewa",
+    ),
+    ComplaintCategory.CALL_DROPS: (
+        "drops", "drop", "dropped", "cuts", "cut", "disconnect", "disconnects",
+        "redial", "reconnect", "inakatika", "yanakatika", "zinakatika", "inakata",
+    ),
+    ComplaintCategory.VOICE_QUALITY: (
+        "echo", "muffled", "choppy", "distorted", "garbled", "crackling", "inaudible",
+        "sauti", "hasikiki", "haieleweki",
+    ),
+    ComplaintCategory.NETWORK_CONGESTION: (
+        "congested", "congestion", "busy", "jammed", "peak", "msongamano", "imejaa",
+    ),
+    ComplaintCategory.BILLING: (
+        "charged", "charge", "charges", "deducted", "deduction", "refund", "airtime",
+        "balance", "overcharged", "premium", "nimetozwa", "natozwa", "makato", "salio",
+    ),
+    ComplaintCategory.BUNDLE_CONFUSION: (
+        "bundle", "bundles", "bando", "ofa", "offer", "subscription", "expired",
+        "activated", "reflect",
+    ),
+    ComplaintCategory.SIM_SWAP: (
+        "sim", "simkadi", "laini", "swap", "replacement", "registered",
+    ),
+}
+
+#: Terms that mark the message as *about the network* even without a category hit — used to
+#: nudge an ambiguous complaint towards the network side rather than `OTHER`.
+NETWORK_HINTS: tuple[str, ...] = (
+    "network", "mtandao", "netu", "signal", "coverage", "data", "internet", "intaneti",
+    "calls", "call", "simu", "sauti", "4g", "3g", "5g", "mast", "tower", "browsing",
+)
+
+#: Function words, used to detect the language actually written rather than declared.
+LANGUAGE_MARKERS: dict[Language, tuple[str, ...]] = {
+    Language.ENGLISH: (
+        "the", "is", "not", "my", "cannot", "since", "please", "and", "have", "this",
+        "every", "with", "even", "all",
+    ),
+    Language.SWAHILI: (
+        "hakuna", "sana", "leo", "jana", "tafadhali", "kwa", "nini", "mtandao", "simu",
+        "haifanyi", "imekata", "nimejaribu", "asubuhi", "jioni", "pole", "bado",
+        "yangu", "kila", "siwezi", "lakini", "kabisa", "hapa", "kwetu", "ni",
+    ),
+    Language.SHENG: (
+        "iko", "niaje", "sasa", "buda", "manze", "fom", "poa", "mzee", "kuna", "imeenda",
+        "ngori", "noma", "netu", "ju", "kwa ground", "mdogo mdogo",
+    ),
+}
+
+#: Words that raise urgency. Business impact and total loss of service outrank annoyance.
+URGENCY_TERMS: dict[str, int] = {
+    "emergency": 5,
+    "hospital": 5,
+    "business": 4,
+    "losing money": 4,
+    "lose my clients": 4,
+    "customers": 4,
+    "all day": 4,
+    "since morning": 3,
+    "three days": 4,
+    "two days": 4,
+    "whole area": 4,
+    "everyone": 4,
+    "nobody": 4,
+    "dharura": 5,
+    "biashara": 4,
+    "siku tatu": 4,
+    "siku mbili": 4,
+    "tangu asubuhi": 3,
+    "kila mtu": 4,
+    "eneo lote": 4,
+    "wateja": 4,
+}
+
+#: Sentiment markers. Crude on purpose: the point is to flag anger for routing, not to
+#: measure feeling precisely.
+ANGRY_TERMS: tuple[str, ...] = (
+    "unacceptable", "disgusted", "fed up", "terrible", "worst", "useless", "thieves",
+    "stealing", "ridiculous", "shame", "scam",
+    "aibu", "mbaya sana", "wezi", "hamna maana", "nimechoka", "mnatuibia", "hovyo",
+)
+FRUSTRATED_TERMS: tuple[str, ...] = (
+    "again", "still", "every day", "always", "third time", "repeatedly", "tired",
+    "keep getting", "keeps happening",
+    "tena", "bado", "kila siku", "mara ya tatu", "nimechoka kupiga", "kila wakati",
+)
+CALM_TERMS: tuple[str, ...] = (
+    "please", "kindly", "could you", "thank you", "tafadhali", "asante", "naomba",
+    "thibitisheni", "msaada",
+)
+
+
+#: Tie-break order when two categories score identically.
+#:
+#: Ties are rare but must resolve the same way on every run (determinism is a gate), and
+#: the order is not arbitrary: a complaint that mentions a specific, narrow symptom is
+#: better labelled by that symptom than by a broad one. `sim_swap` and `bundle_confusion`
+#: name a single concrete event; `no_service` and `call_drops` name a specific failure;
+#: `network_congestion` is the catch-all network story; `other` always loses.
+TIE_BREAK_ORDER: dict[ComplaintCategory, int] = {
+    ComplaintCategory.SIM_SWAP: 0,
+    ComplaintCategory.BUNDLE_CONFUSION: 1,
+    ComplaintCategory.BILLING: 2,
+    ComplaintCategory.NO_SERVICE: 3,
+    ComplaintCategory.CALL_DROPS: 4,
+    ComplaintCategory.VOICE_QUALITY: 5,
+    ComplaintCategory.SLOW_DATA: 6,
+    ComplaintCategory.NETWORK_CONGESTION: 7,
+    ComplaintCategory.OTHER: 99,
+}
