@@ -256,7 +256,7 @@ class ToolRegistry:
         started = time.perf_counter()
         try:
             result = tool.handler(validated)
-        except Exception as error:  # noqa: BLE001 - a tool failing must not kill the loop
+        except Exception as error:
             _log.warning("tool_failed", extra={"tool": name, "error": type(error).__name__})
             return ToolCall(
                 name=name,

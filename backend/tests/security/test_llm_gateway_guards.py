@@ -394,7 +394,7 @@ def test_the_budget_stops_an_unbounded_loop(settings) -> None:
         settings,
         _models_or(lambda _r: httpx.Response(200, json=_envelope(VALID_CLASSIFICATION))),
     )
-    gateway._budget.max_calls = 2  # noqa: SLF001 - exercising the ceiling is the test
+    gateway._budget.max_calls = 2
     notes = [
         gateway.complete(task="classify_complaint", system="c", user=f"u{index}").note
         for index in range(4)
