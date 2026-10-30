@@ -94,6 +94,19 @@ repositories so the ports and the adapters are proven to fit. Writing that test 
 found a second thing: a fixture whose recovery happened *after* the frozen clock, which the
 service correctly reported as "not recovered" — the service was right and the test was wrong.
 
+**`make demo` seeded but never ran detection**, so a fresh console showed zero incidents —
+correct, and indistinguishable from broken. A `pipeline` target now runs between `seed` and
+`catalog`. Adding it also tripped `test_task_entry_points_agree`, the Phase 0 test that
+holds the Makefile, `make.ps1` and `scripts/mk.py` to the same target list: the rule in
+CLAUDE.md ("never add a target to one without the others") turned out to be enforced rather
+than aspirational.
+
+**Complaint attachment was never persisted.** Correlation had written 69 `incident_link`
+rows while every `complaint.incident_id` stayed null, because the script only wrote back
+when the outcome said a live incident existed *because of* that complaint. The fix removed
+the duplication rather than correcting the condition: `incident_link` is correlation's own
+authoritative record, and the column is now derived from it in one statement.
+
 **Two import-linter contracts were broken.** `ai.agents` transitively imported `httpx`
 through the gateway, and `ai.ml.training` imported `infrastructure`. Both contracts were
 right and both fixes improved the design: agents now depend on `LlmPort` declared in their

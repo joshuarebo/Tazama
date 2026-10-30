@@ -58,7 +58,7 @@ six capabilities; the others are deliberately narrower and the server enforces i
 | Phase 2 scenarios | **precision 1.0000 / recall 1.0000** against floors of 0.85/0.80; maintenance suppression 100%; replay deterministic |
 | Phase 3 ML | forecast beats seasonal-naive by **15.7%** overall and on the hours where demand exists; anomaly recall 0.600 at a 3.93% flag rate |
 | Phase 4 evals | diagnosis **7/7** labelled scenarios top-1 with no model involved; injection suite 100% blocked; all five degraded modes answer correctly |
-| Phase 5 frontend | lint and `tsc` clean; `npm audit` **0 vulnerabilities**; axe clean on all six pages; token contrast asserted in both themes |
+| Phase 5 frontend | lint and `tsc` clean; `npm audit` **0 vulnerabilities**; **25/25 Playwright tests pass** (journeys, axe on all six pages, token contrast in both themes) |
 | Phase 6 reporting | digest built, PII-scanned, size-guarded; schedule timezone-correct; no send path exists |
 
 ---
@@ -132,8 +132,10 @@ Ordered by what would block a pilot.
     verification; the in-memory vector backend is a linear scan.
 12. **No component unit tests** in the frontend, and no console i18n.
 13. **No GNN, no bandit.** Scaffolds exist, are flagged off, and refuse to run.
-14. **`make demo` has not been rehearsed from a fresh clone with empty volumes.** The stack
-    runs here, from a working tree with a seeded database. That is not the same test.
+14. **`make demo` has not been rehearsed from a fresh clone with empty volumes.** Its steps
+    *have* been run in sequence on this machine from a wiped database — `seed` → `pipeline`
+    → `catalog` → API → web, producing the 17 incidents and 69 correlated complaints above —
+    but a fresh clone with empty volumes is a different test and has not been done.
 
 `docs/tech-debt.md` carries the full list with escalation triggers.
 

@@ -90,6 +90,22 @@ so neither the sign-in panel nor the signed-in header existed yet, `isVisible()`
 afterwards timed out against a blank page. `tests/e2e/helpers.ts` now waits for the shell
 to have decided (`Sign in` heading **or** `signed in as`) before acting on what it decided.
 
+### Four more things the journeys caught
+
+Worth listing, because each one was invisible without a test driving the real page.
+
+1. **The Explorer's flagship example query returned zero rows.** It used
+   `DATETIME('now', '-7 days')` against a seeded database whose data ends in March, so the
+   first thing a reviewer clicks produced an empty result — correct, and looking broken.
+   The example is now anchored on `MAX(received_at)`, the same lesson as the insights
+   window, and the test demands *rows* rather than a result panel.
+2. **The skip link did nothing** (see above) — found only by pressing Tab.
+3. **Several assertions raced the data.** The pages fetch asynchronously, so counting rows
+   immediately counts a loading page. Fixed with explicit content waits, not timeouts.
+4. **Next's dev overlay contributes an empty `role="alert"`.** The assertion that a SQL
+   refusal is "not an error state" had to be scoped to `main` — the refusal panel is
+   correctly a `status`, and the stray alert is not ours.
+
 ### Next 15 → 16, and the dependency audit
 
 `npm audit` reported 11 vulnerabilities, 3 critical. Resolved to **zero**:

@@ -290,6 +290,23 @@ def e2e() -> None:
     run([npm(), "run", "e2e"], cwd=WEB)
 
 
+@task("a11y", "Accessibility and design-token contrast checks only", "test")
+def a11y() -> None:
+    """The subset worth running on its own.
+
+    Separate from `e2e` because it is the gate a *design* change needs: the token contrast
+    assertions are what catch a brand palette that cannot carry button text, and waiting
+    for the full journey suite to learn that is friction nobody accepts for long.
+    """
+    if not (WEB / "node_modules").exists():
+        say("  web/ not installed — run: mk web-install", YELLOW)
+        return
+    run(
+        [npm(), "exec", "--", "playwright", "test", "a11y.spec.ts", "tokens.spec.ts"],
+        cwd=WEB,
+    )
+
+
 @task("load", "Load test (Locust, headless)", "test")
 def load() -> None:
     uv_run(

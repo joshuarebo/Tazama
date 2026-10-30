@@ -21,11 +21,14 @@ import { ApiError, getTables, runQuery, type QueryResult } from "@/lib/api";
 
 const EXAMPLES: { label: string; sql: string; note: string }[] = [
   {
-    label: "Complaints per region, last 7 days",
-    note: "safe — allowlisted tables, bounded window",
+    label: "Complaints per region, last 7 days of data",
+    note: "safe — allowlisted tables, bounded window anchored on the data",
+    // Anchored on the newest complaint, not on `now`. The seeded database sits still, so a
+    // `DATETIME('now', '-7 days')` window returns zero rows and the flagship example looks
+    // broken while being perfectly correct. The same trap as the insights window.
     sql: `SELECT region, COUNT(*) AS complaints
 FROM complaint
-WHERE received_at >= DATETIME('now', '-7 days')
+WHERE received_at >= (SELECT DATETIME(MAX(received_at), '-7 days') FROM complaint)
 GROUP BY region
 ORDER BY complaints DESC`,
   },

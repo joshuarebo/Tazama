@@ -6,8 +6,9 @@ MK := $(PY) scripts/mk.py
 
 .DEFAULT_GOAL := help
 .PHONY: help bootstrap bootstrap-ml web-install fmt lint typecheck boundaries secrets audit \
-        sbom test test-unit test-it coverage-gate eval eval-live e2e load migrate downgrade \
-        seed catalog replay train openapi doctor api worker fake-llm web up up-oracle down \
+        sbom test test-unit test-it coverage-gate eval eval-live e2e a11y load migrate downgrade \
+        seed catalog pipeline replay train openapi doctor api worker fake-llm web \
+        up up-oracle down \
         clean demo ci
 
 help:          ; @$(MK) help
@@ -28,11 +29,13 @@ coverage-gate: ; @$(MK) coverage-gate
 eval:          ; @$(MK) eval
 eval-live:     ; @$(MK) eval-live
 e2e:           ; @$(MK) e2e
+a11y:          ; @$(MK) a11y
 load:          ; @$(MK) load
 migrate:       ; @$(MK) migrate
 downgrade:     ; @$(MK) downgrade
 seed:          ; @$(MK) seed
 catalog:       ; @$(MK) catalog
+pipeline:      ; @$(MK) pipeline
 replay:        ; @$(MK) replay
 train:         ; @$(MK) train
 openapi:       ; @$(MK) openapi

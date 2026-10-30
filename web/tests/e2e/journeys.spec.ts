@@ -21,15 +21,20 @@ test.describe("Command Center", () => {
       .toBeVisible();
 
     // Headline figures come from the API, so a number here proves the whole read path.
-    const liveIncidents = page.getByText("Live incidents").locator("..");
+    // Scoped to the stat card: a bare text match hits both the label and its wrapper.
+    const liveIncidents = page.locator(".card", { hasText: "Live incidents" }).first();
     await expect(liveIncidents).toBeVisible();
+    await expect(liveIncidents.locator(".stat")).toHaveText(/^[\d,]+$/);
 
-    // The queue, worst first.
+    // The queue, worst first. The rows come from the API, so wait for one rather than
+    // counting a still-loading table.
     const table = page.getByRole("table", { name: /live incidents/i });
     await expect(table).toBeVisible();
     const rows = table.locator("tbody tr");
     await expect(rows.first()).toBeVisible();
-    expect(await rows.count()).toBeGreaterThan(0);
+    await expect
+      .poll(async () => rows.count(), { message: "no incident rows rendered" })
+      .toBeGreaterThan(0);
 
     // And the footer states what this is.
     await expect(page.getByText("Internal — Confidential")).toBeVisible();
@@ -53,14 +58,15 @@ test.describe("Incident card", () => {
       .first()
       .getByRole("link")
       .first();
+    await expect(firstIncident).toBeVisible();
     const title = (await firstIncident.textContent())?.trim() ?? "";
     await firstIncident.click();
 
     await expect(page.getByRole("heading", { name: title })).toBeVisible();
 
     // Impact in the units a manager asks about.
-    await expect(page.getByText("Subscribers affected")).toBeVisible();
-    await expect(page.getByText(/^Cells$/)).toBeVisible();
+    await expect(page.getByText("Subscribers affected").first()).toBeVisible();
+    await expect(page.getByText(/^Cells$/).first()).toBeVisible();
 
     // The evidence section is the reason this screen exists.
     await expect(page.getByText(/probable cause and evidence/i)).toBeVisible();
@@ -84,13 +90,16 @@ test.describe("Data Explorer", () => {
     await page.goto("/explorer");
 
     await expect(page.getByRole("heading", { name: "Data Explorer" })).toBeVisible();
-    await expect(page.getByText(/allowlisted tables/i)).toBeVisible();
-
+    await expect(page.getByText(/allowlisted tables/i).first()).toBeVisible();
     // --- the safe query ---
     await page.getByRole("button", { name: /complaints per region/i }).click();
     await page.getByRole("button", { name: /run query/i }).click();
 
-    await expect(page.getByRole("table", { name: /query result/i })).toBeVisible();
+    // Rows, not just a result panel. An example that returns nothing is how the Explorer
+    // comes to look broken while working perfectly — which is what this caught.
+    const result = page.getByRole("table", { name: /query result/i });
+    await expect(result).toBeVisible();
+    await expect(result.locator("tbody tr").first()).toBeVisible();
     await expect(page.getByText(/row\(s\) ·/)).toBeVisible();
     // The SQL the server actually ran is shown back, cap included.
     await expect(page.getByText(/SQL as executed/i)).toBeVisible();
@@ -103,8 +112,11 @@ test.describe("Data Explorer", () => {
     await expect(refusal).toBeVisible();
     await expect(page.getByText(/never sent to the database/i)).toBeVisible();
 
-    // A refusal is a successful outcome here, not an error state.
-    await expect(page.getByRole("alert")).toHaveCount(0);
+    // A refusal is a successful outcome here, not an error state: the guard panel is a
+    // `status`, not an `alert`. Scoped to `main` because Next's dev overlay contributes an
+    // empty `role="alert"` of its own, which is not ours and not a failure.
+    await expect(page.getByRole("main").getByRole("alert")).toHaveCount(0);
+    await expect(page.getByRole("status").filter({ hasText: /refused/i })).toBeVisible();
   });
 
   test("a stacked statement is refused too", async ({ page }) => {
@@ -163,8 +175,13 @@ test.describe("Insights", () => {
     await expect(page.getByText(/^Lead and lag$/)).toBeVisible();
 
     // The reading in words, so the panel does not require remembering the sign convention.
+    // Lead-lag needs two round trips — the busiest-cells list picks the cell the analysis
+    // then runs on — so wait for the result badges before asserting the prose.
+    await expect(page.getByText(/^best lag/i)).toBeVisible();
     await expect(
-      page.getByText(/before the complaint rate|move together|customers notice first|no usable/i),
+      page
+        .getByText(/before the complaint rate|move together|customers notice first|no usable/i)
+        .first(),
     ).toBeVisible();
 
     // A positive lag means the KPI moved first — stated on the page.
@@ -190,9 +207,11 @@ test.describe("Reports", () => {
     await expect(page.getByText(/TEAMS_DRY_RUN = true/)).toBeVisible();
     await expect(page.getByText(/nothing has been posted to teams/i)).toBeVisible();
 
-    // The rendered card…
-    await expect(page.getByText(/teams card preview/i)).toBeVisible();
-    await expect(page.getByText(/DEMO DATA/)).toBeVisible();
+    // The rendered card… scoped to the preview, because the shell's own demo ribbon says
+    // "Demo data" too and a loose match hits both.
+    const preview = page.locator("section", { hasText: /teams card preview/i }).first();
+    await expect(preview).toBeVisible();
+    await expect(preview.getByText(/DEMO DATA/)).toBeVisible();
 
     // …and the payload itself, which is what makes the preview a real check.
     await expect(page.getByText(/adaptive card payload/i)).toBeVisible();
@@ -203,6 +222,8 @@ test.describe("Reports", () => {
 
     // Weekly works too.
     await page.getByRole("button", { name: "weekly", exact: true }).click();
-    await expect(page.getByText(/weekly network-care summary/i)).toBeVisible();
+    // The title appears twice by design: as the card's heading and inside the JSON payload
+    // — which is exactly the point of showing both.
+    await expect(page.getByText(/weekly network-care summary/i).first()).toBeVisible();
   });
 });

@@ -107,8 +107,10 @@ test("tables have captions for screen readers", async ({ page }) => {
   await signIn(page, "Admin");
   await page.goto("/complaints");
   // `Table` renders an sr-only caption; without it a screen reader announces "table" and
-  // nothing else.
+  // nothing else. Wait for the first table before counting: the data arrives from the API,
+  // so counting immediately counts a still-loading page.
   const tables = page.getByRole("table");
+  await expect(tables.first()).toBeVisible();
   const count = await tables.count();
   expect(count).toBeGreaterThan(0);
   for (let index = 0; index < count; index += 1) {
