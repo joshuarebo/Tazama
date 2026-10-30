@@ -10,11 +10,18 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { type ReactNode, useEffect, useState } from "react";
+import { type ReactNode, useState, useSyncExternalStore } from "react";
 
 import { Button, ErrorNote } from "@/components/ui";
 import { Wordmark } from "@/components/Wordmark";
-import { currentRole, login, signOut, type Meta } from "@/lib/api";
+import {
+  login,
+  sessionServerSnapshot,
+  sessionSnapshot,
+  signOut,
+  subscribeToSession,
+  type Meta,
+} from "@/lib/api";
 
 const NAV = [
   { href: "/", label: "Command Center", capability: "incident:read" },
@@ -36,15 +43,18 @@ const DEV_ACCOUNTS = [
 
 export function Shell({ meta, children }: { meta: Meta | null; children: ReactNode }) {
   const pathname = usePathname();
-  const [role, setRole] = useState<string | null>(null);
   const [error, setError] = useState<unknown>(null);
   const [busy, setBusy] = useState(false);
-  const [ready, setReady] = useState(false);
 
-  useEffect(() => {
-    setRole(currentRole());
-    setReady(true);
-  }, []);
+  // The session lives in `sessionStorage`, which does not exist on the server. Reading it
+  // in an effect and calling `setState` cost a cascading render on every page load;
+  // `useSyncExternalStore` with an explicit server snapshot is the purpose-built answer and
+  // removes the "ready" flag entirely — the server snapshot *is* "not known yet".
+  const role = useSyncExternalStore(
+    subscribeToSession,
+    sessionSnapshot,
+    sessionServerSnapshot,
+  );
 
   async function signIn(user: string) {
     setBusy(true);
@@ -52,7 +62,7 @@ export function Shell({ meta, children }: { meta: Meta | null; children: ReactNo
     try {
       // Dev mode: the password equals the username. The settings validator refuses this
       // auth mode outside local/dev, so it cannot reach production.
-      setRole(await login(user, user));
+      await login(user, user);
     } catch (caught) {
       setError(caught);
     } finally {
@@ -124,12 +134,7 @@ export function Shell({ meta, children }: { meta: Meta | null; children: ReactNo
                 <span className="text-ink-muted">
                   signed in as <strong className="text-ink">{role.replace(/_/g, " ")}</strong>
                 </span>
-                <Button
-                  onClick={() => {
-                    signOut();
-                    setRole(null);
-                  }}
-                >
+                <Button onClick={signOut}>
                   Sign out
                 </Button>
               </>
@@ -138,8 +143,15 @@ export function Shell({ meta, children }: { meta: Meta | null; children: ReactNo
         </div>
       </header>
 
-      <main id="main" className="mx-auto w-full max-w-[1600px] flex-1 px-4 py-5">
-        {!ready ? null : role ? (
+      {/* `tabIndex={-1}` is what makes the skip link work. Without it the browser scrolls
+          to `#main` but leaves focus where it was, so a keyboard user presses the skip link
+          and then still tabs through the whole nav — the link appears to do nothing. */}
+      <main
+        id="main"
+        tabIndex={-1}
+        className="mx-auto w-full max-w-[1600px] flex-1 px-4 py-5 outline-none"
+      >
+        {role ? (
           children
         ) : (
           <div className="mx-auto max-w-lg">

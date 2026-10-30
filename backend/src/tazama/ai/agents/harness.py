@@ -231,10 +231,7 @@ class ToolRegistry:
                 arguments=parsed,
                 tier=tier,
                 allowed=False,
-                error=(
-                    f"tool {name!r} is tier {tier!r}, above this agent's {max_tier!r} "
-                    f"ceiling"
-                ),
+                error=(f"tool {name!r} is tier {tier!r}, above this agent's {max_tier!r} ceiling"),
             )
 
         try:

@@ -46,6 +46,24 @@ class RegressionMetrics:
     mape_rows: int
     rows: int
     mean_actual: float
+    #: Standard deviation of the *predictions*. Zero means the model learned a constant.
+    pred_std: float = 0.0
+    #: MAE restricted to rows where something actually happened.
+    mae_nonzero: float = 0.0
+    nonzero_rows: int = 0
+
+    @property
+    def degenerate(self) -> bool:
+        """True when the model emits one value regardless of its input.
+
+        This matters far more than it looks. On a sparse target — complaints per cell-hour
+        is 97% zeros — predicting a constant zero scores an *excellent* MAE and beats a
+        seasonal-naive baseline that honestly carries last week's spikes forward. The
+        comparison is then won by a model that has learned nothing, and the gate goes
+        green. So degeneracy is reported as its own fact rather than left to be inferred
+        from a suspiciously good number.
+        """
+        return self.pred_std <= 0.0
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -56,6 +74,10 @@ class RegressionMetrics:
             "mape_rows": self.mape_rows,
             "rows": self.rows,
             "mean_actual": round(self.mean_actual, 6),
+            "pred_std": round(self.pred_std, 8),
+            "mae_nonzero": round(self.mae_nonzero, 6),
+            "nonzero_rows": self.nonzero_rows,
+            "degenerate": self.degenerate,
         }
 
 
@@ -190,9 +212,18 @@ def regression_metrics(actual: Any, predicted: Any) -> RegressionMetrics:
 
     defined = np.abs(y) > MAPE_FLOOR
     mape = float(np.mean(np.abs(error[defined] / y[defined])) * 100.0) if defined.any() else None
+
+    # The two numbers that expose a constant predictor on a sparse target.
+    pred_std = float(np.std(yhat))
+    nonzero = np.abs(y) > 0.0
+    mae_nonzero = float(np.mean(np.abs(error[nonzero]))) if nonzero.any() else 0.0
+
     return RegressionMetrics(
         mae=mae,
         rmse=rmse,
+        pred_std=pred_std,
+        mae_nonzero=mae_nonzero,
+        nonzero_rows=int(nonzero.sum()),
         r2=r2,
         mape=mape,
         mape_rows=int(defined.sum()),

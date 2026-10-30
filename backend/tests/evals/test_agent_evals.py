@@ -316,8 +316,7 @@ def test_the_deterministic_path_diagnoses_every_labelled_scenario(
     """
     outcome = DiagnosisAgent(registry=registry).diagnose(incident_id)
     assert outcome.cause is FakeData.SCENARIOS[incident_id]["truth"], (
-        f"{incident_id}: expected {FakeData.SCENARIOS[incident_id]['truth']}, "
-        f"got {outcome.cause}"
+        f"{incident_id}: expected {FakeData.SCENARIOS[incident_id]['truth']}, got {outcome.cause}"
     )
     assert outcome.evidence, "a diagnosis must cite evidence"
 
@@ -335,7 +334,7 @@ def test_diagnosis_accuracy_meets_the_gate(registry) -> None:
 
 
 def test_no_evidence_produces_no_diagnosis(registry) -> None:
-    """"I do not know" is a correct answer, and the only honest one here."""
+    """ "I do not know" is a correct answer, and the only honest one here."""
     outcome = DiagnosisAgent(registry=registry).diagnose("INC-SILENT")
     assert outcome.cause is None
     assert outcome.needs_human is True

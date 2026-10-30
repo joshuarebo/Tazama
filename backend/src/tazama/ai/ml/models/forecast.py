@@ -60,7 +60,13 @@ RANDOM_STATE = 20260301
 #: Deliberately modest: ~29k training rows on the seed, a sparse target, and a phase gate
 #: that cares about honesty rather than the last 2% of MAE. Tuning is tech debt, recorded.
 DEFAULT_PARAMS: dict[str, Any] = {
-    "objective": "regression_l1",  # MAE: the metric we report and a sparse, spiky target
+    # Poisson, not L1 or L2. The target is a non-negative arrival rate, and that is what
+    # Poisson deviance is for — but the decisive reason is narrower: on a sparse count
+    # target the L1 optimum *is* the median, which is zero, so `regression_l1` trains a
+    # constant-zero predictor that scores an excellent MAE and beats an honest baseline.
+    # Measured on the region-grain frame, Poisson is 18% better than seasonal-naive on the
+    # hours where demand actually exists, where L1 was worse than the baseline.
+    "objective": "poisson",
     "n_estimators": 400,
     "learning_rate": 0.05,
     "num_leaves": 31,
@@ -353,6 +359,7 @@ def train_call_surge_forecast(
         target=features.target,
         feature_columns=features.feature_columns,
         split=split,
+        entity=features.entity,
     )
 
     train_mask = split.mask(frame, "train")

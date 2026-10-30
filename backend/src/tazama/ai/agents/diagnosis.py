@@ -29,8 +29,8 @@ from dataclasses import dataclass
 from typing import Any
 
 from tazama.ai.agents.harness import AgentTrace, Budget, BudgetExhausted, ToolRegistry
+from tazama.ai.agents.ports import LlmPort
 from tazama.ai.agents.tools import CEILINGS, GRANTS
-from tazama.ai.llm.gateway import LlmGateway
 from tazama.ai.llm.schemas import Diagnosis
 from tazama.core.logging import get_logger
 from tazama.domain.value_objects import IncidentCause
@@ -96,7 +96,7 @@ class DiagnosisAgent:
         self,
         *,
         registry: ToolRegistry,
-        gateway: LlmGateway | None = None,
+        gateway: LlmPort | None = None,
         budget: Budget | None = None,
     ) -> None:
         self._registry = registry
@@ -201,7 +201,13 @@ class DiagnosisAgent:
 
         if self._gateway is None or not self._gateway.configured:
             return self._from_rules_or_unknown(
-                incident_id, ruled, runbooks, steps, calls, budget, "no model configured",
+                incident_id,
+                ruled,
+                runbooks,
+                steps,
+                calls,
+                budget,
+                "no model configured",
             )
 
         budget.tick_step()
@@ -224,7 +230,13 @@ class DiagnosisAgent:
         if not isinstance(result.parsed, Diagnosis):
             steps.append("model unusable; using the deterministic answer")
             return self._from_rules_or_unknown(
-                incident_id, ruled, runbooks, steps, calls, budget, result.note or "model degraded",
+                incident_id,
+                ruled,
+                runbooks,
+                steps,
+                calls,
+                budget,
+                result.note or "model degraded",
             )
 
         verified, note = _verify(result.parsed, alarms=alarms, topology=topology)
@@ -234,7 +246,13 @@ class DiagnosisAgent:
             steps.append(f"model output rejected: {note}")
             _log.warning("diagnosis_ungrounded", extra={"incident_id": incident_id, "note": note})
             return self._from_rules_or_unknown(
-                incident_id, ruled, runbooks, steps, calls, budget, note,
+                incident_id,
+                ruled,
+                runbooks,
+                steps,
+                calls,
+                budget,
+                note,
             )
 
         return self._finish(
@@ -282,8 +300,7 @@ class DiagnosisAgent:
                     "incident_id": incident_id,
                     "runbook_id": runbook_id,
                     "justification": (
-                        summary
-                        or f"diagnosed as {cause} with confidence {confidence:.2f}"
+                        summary or f"diagnosed as {cause} with confidence {confidence:.2f}"
                     ),
                 },
                 allow=GRANTS[AGENT],
@@ -413,9 +430,7 @@ def _rule_diagnosis(
 
     alarm_types = [str(a.get("alarm_type", "")) for a in alarms]
     critical = [a for a in alarms if str(a.get("severity", "")) == "critical"]
-    shared_upstream = [
-        node for node in topology if int(node.get("affected_cells", 0) or 0) > 1
-    ]
+    shared_upstream = [node for node in topology if int(node.get("affected_cells", 0) or 0) > 1]
 
     # 2. A transmission fault on a shared node: explains the fault and the fan-out.
     if any("transmission" in kind or "link" in kind for kind in alarm_types) and shared_upstream:

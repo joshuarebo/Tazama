@@ -57,6 +57,49 @@ export function currentRole(): string | null {
   }
 }
 
+/* ------------------------------------------------------- the session as a store
+ *
+ * The shell needs the signed-in role, which lives in `sessionStorage` and therefore does
+ * not exist during server rendering. Reading it in an effect and calling `setState` works
+ * but costs a cascading render on every page load, and React has a purpose-built answer:
+ * `useSyncExternalStore` with an explicit server snapshot. These three functions are that
+ * store. `sessionStorage` is only ever written through `writeToken`/`signOut`, so the
+ * subscription is a plain listener set rather than a `storage` event listener — the
+ * `storage` event does not fire in the tab that made the change.
+ */
+
+const listeners = new Set<() => void>();
+
+/** Cached so `getSnapshot` returns a stable value; React requires that. */
+let snapshot: string | null = null;
+let snapshotRead = false;
+
+function refresh(): void {
+  snapshot = currentRole();
+  snapshotRead = true;
+  for (const listener of listeners) listener();
+}
+
+export function subscribeToSession(listener: () => void): () => void {
+  listeners.add(listener);
+  return () => {
+    listeners.delete(listener);
+  };
+}
+
+export function sessionSnapshot(): string | null {
+  if (!snapshotRead) {
+    snapshot = currentRole();
+    snapshotRead = true;
+  }
+  return snapshot;
+}
+
+/** The server has no session, and saying so explicitly avoids a hydration mismatch. */
+export function sessionServerSnapshot(): string | null {
+  return null;
+}
+
 export function signOut(): void {
   try {
     window.sessionStorage.removeItem(TOKEN_KEY);
@@ -64,6 +107,7 @@ export function signOut(): void {
   } catch {
     /* ignore */
   }
+  refresh();
 }
 
 export async function login(username: string, password: string): Promise<string> {
@@ -77,6 +121,7 @@ export async function login(username: string, password: string): Promise<string>
     throw new ApiError(response.status, body.type ?? "", body.detail ?? "Sign-in failed.");
   }
   writeToken(body.access_token, body.role);
+  refresh();
   return body.role as string;
 }
 

@@ -64,3 +64,6 @@ sbom*.json
 # local gate logs
 ci.log
 fmt.log
+
+# Next 16 regenerates this on every dev start
+web/AGENTS.md

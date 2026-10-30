@@ -160,9 +160,7 @@ async def digest(
     )
     awaiting = int(
         session.execute(
-            select(func.count())
-            .select_from(Notification)
-            .where(Notification.status == "proposed"),
+            select(func.count()).select_from(Notification).where(Notification.status == "proposed"),
         ).scalar_one(),
     )
 

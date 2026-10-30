@@ -19,9 +19,15 @@
    ============================================================================ */
 
 :root {
-  /* --- brand (PLACEHOLDER, UNVERIFIED) --- */
-  --brand-green: #3fa72f;
-  --brand-green-strong: #2f7d23;
+  /* --- brand (PLACEHOLDER, UNVERIFIED) ---
+     These are darker than a brand green usually is, for a reason worth keeping when the
+     official palette replaces them: white text on the original #3fa72f measured 3.10:1,
+     below the 4.5:1 WCAG AA needs for the button label, and axe failed every page on it.
+     #2f7d23 gives 5.15:1 on white and the strong variant gives 6.78:1 on the soft
+     background used by the active nav item. If the official green is lighter, keep it for
+     fills and borders and pair button text with a darker shade rather than with white. */
+  --brand-green: #2f7d23;
+  --brand-green-strong: #1d4d16;
   --brand-green-soft: #e8f6e4;
 
   /* --- neutrals --- */
@@ -37,11 +43,14 @@
   /* --- status --- */
   --danger: #c02525;
   --danger-soft: #fdeaea;
-  --warn: #9a6207;
+  /* 4.45:1 on the sunken surface at #9a6207 — just under AA, and axe caught it on the
+     Reports and Complaints pages. Every status colour here is checked against the *sunken*
+     surface, not white, because that is where the small bold labels actually sit. */
+  --warn: #8a5706;
   --warn-soft: #fdf3e2;
   --info: #15607a;
   --info-soft: #e5f2f7;
-  --ok: #1f7a3d;
+  --ok: #1a6a34;
   --ok-soft: #e6f4ea;
 
   /* --- priority (P1 loudest) --- */

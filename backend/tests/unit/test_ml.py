@@ -19,6 +19,7 @@ construction, or it is asserting something about the seed generator instead.
 
 from __future__ import annotations
 
+import hashlib
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
@@ -92,13 +93,26 @@ class FakeSource:
             and at.hour in self.OUTAGE_HOURS
         )
 
+    @staticmethod
+    def _jitter(*parts: object) -> float:
+        """Deterministic pseudo-noise in [-0.5, 0.5).
+
+        Noiseless fixtures are not a kindness: with complaints an exact function of
+        congestion, every KPI becomes perfectly rank-correlated with the target and the
+        leakage gate refuses the frame — correctly, because on real data a Spearman rho of
+        1.0 between a lagged KPI and the target *is* leakage. Hash-derived rather than
+        RNG-derived so the reproducibility tests still hold.
+        """
+        digest = hashlib.sha256("|".join(str(part) for part in parts).encode()).digest()
+        return int.from_bytes(digest[:4], "big") / 0xFFFFFFFF - 0.5
+
     def _congestion(self, cell_index: int, hour: int) -> float:
         at = T0 + timedelta(hours=hour)
         busy = 40.0 if 16 <= at.hour <= 21 else 0.0
         # A mild congestion bump every fourth day gives the forecast a non-seasonal
         # signal to learn, without being large enough to read as a fault.
         bump = 12.0 if (at.day % 4 == 0 and 9 <= at.hour <= 13 and cell_index == 1) else 0.0
-        return 30.0 + busy + bump
+        return 30.0 + busy + bump + 4.0 * self._jitter("prb", cell_index, hour)
 
     def kpi_observations(
         self,
@@ -122,20 +136,25 @@ class FakeSource:
                         cell_id=cell_id,
                         bucket_start=at,
                         values={
-                            "availability_pct": (
-                                12.0 if outage else 100.0 - (prb - 30.0) / 20.0
+                            "availability_pct": (12.0 if outage else 100.0 - (prb - 30.0) / 20.0),
+                            "rrc_setup_success_pct": (
+                                99.5
+                                - (prb - 30.0) / 30.0
+                                + 0.4 * self._jitter("rrc", cell_id, hour)
                             ),
-                            "rrc_setup_success_pct": 99.5 - (prb - 30.0) / 30.0,
-                            "erab_setup_success_pct": 99.4,
-                            "drop_rate_pct": (
-                                28.0 if outage else 0.3 + (prb - 30.0) / 100.0
-                            ),
+                            "erab_setup_success_pct": 99.4
+                            + 0.3 * self._jitter("erab", cell_id, hour),
+                            "drop_rate_pct": (28.0 if outage else 0.3 + (prb - 30.0) / 100.0),
                             "prb_utilisation_pct": prb,
-                            "dl_throughput_mbps": 25.0 - (prb - 30.0) / 4.0,
+                            "dl_throughput_mbps": (
+                                25.0 - (prb - 30.0) / 4.0 + 1.5 * self._jitter("dl", cell_id, hour)
+                            ),
                             "ul_throughput_mbps": 9.0,
-                            "latency_ms": 28.0 + (prb - 30.0) / 2.0,
+                            "latency_ms": 28.0
+                            + (prb - 30.0) / 2.0
+                            + 2.0 * self._jitter("lat", cell_id, hour),
                             "active_users": 150.0 + prb,
-                            "sinr_db": 12.0,
+                            "sinr_db": 12.0 + self._jitter("sinr", cell_id, hour),
                         },
                     ),
                 )
@@ -157,7 +176,10 @@ class FakeSource:
                     continue
                 # Complaints respond to congestion two hours earlier.
                 driver = self._congestion(cell_index, max(0, hour - 2))
-                count = max(0, round((driver - 30.0) / 6.0))
+                count = max(
+                    0,
+                    round((driver - 30.0) / 6.0 + self._jitter("cmp", cell_id, hour)),
+                )
                 rows.append(CountObservation(cell_id=cell_id, bucket_start=at, count=count))
         return tuple(rows)
 
@@ -353,8 +375,7 @@ def test_shap_drivers_are_ranked_and_named(outcome) -> None:
     assert scores == sorted(scores, reverse=True)
     assert all(driver.feature in outcome.feature_columns for driver in outcome.drivers)
     assert all(
-        driver.direction in ("increases", "decreases", "mixed")
-        for driver in outcome.drivers
+        driver.direction in ("increases", "decreases", "mixed") for driver in outcome.drivers
     )
 
 
@@ -700,3 +721,102 @@ def test_data_hash_is_sensitive_to_values_and_to_order(built) -> None:
 
     shuffled = frame.sample(frac=1.0, random_state=7)
     assert data_hash(shuffled, columns=columns) != data_hash(frame, columns=columns)
+
+
+# ================================================= sparsity and degeneracy
+#
+# This block exists because the gate once went green on a model that predicted a constant
+# zero. On a target that is 97% zeros, "predict nothing" scores a better MAE than a
+# baseline that honestly carries spikes forward, so the MAE comparison alone cannot tell a
+# working model from an inert one.
+
+
+def test_a_constant_predictor_is_reported_as_degenerate() -> None:
+    constant = regression_metrics([0.0, 0.0, 1.0, 0.0, 2.0], [0.0, 0.0, 0.0, 0.0, 0.0])
+    assert constant.degenerate is True
+    assert constant.pred_std == 0.0
+    # And it looks *good* on overall MAE, which is exactly the trap.
+    assert constant.mae < 1.0
+    # While being useless on the rows that matter.
+    assert constant.mae_nonzero == pytest.approx(1.5)
+    assert constant.nonzero_rows == 2
+
+
+def test_a_varying_predictor_is_not_degenerate() -> None:
+    varying = regression_metrics([0.0, 1.0, 2.0], [0.1, 0.9, 1.8])
+    assert varying.degenerate is False
+    assert varying.pred_std > 0.0
+
+
+def test_mae_on_nonzero_rows_separates_a_real_model_from_a_constant() -> None:
+    """The metric that cannot be won by predicting nothing."""
+    actual = [0.0] * 97 + [1.0, 2.0, 3.0]
+    predict_zero = regression_metrics(actual, [0.0] * 100)
+    # Slightly wrong on every quiet hour, close on the three that matter — which is what
+    # a model that has actually learned the spikes looks like.
+    real = regression_metrics(actual, [0.2] * 97 + [0.9, 2.1, 2.8])
+
+    assert predict_zero.mae < real.mae, "the constant wins on overall MAE — the trap"
+    assert real.mae_nonzero < predict_zero.mae_nonzero, "and loses where it matters"
+
+
+def test_the_cell_grain_target_is_sparse_and_the_region_grain_is_not(window) -> None:
+    """The measurement that motivated the region grain, asserted rather than remembered."""
+    from tazama.ai.ml.features import aggregate_to_region
+
+    cell = build_feature_frame(FakeSource(), window, now=T0)
+    sparsity_cell = float((cell.frame[cell.target] == 0).mean())
+
+    region = build_feature_frame(FakeSource(), window, now=T0, grain="region")
+    sparsity_region = float((region.frame[region.target] == 0).mean())
+
+    assert sparsity_region < sparsity_cell, (
+        f"aggregating must densify the target: cell {sparsity_cell:.3f} vs region "
+        f"{sparsity_region:.3f}"
+    )
+    assert region.grain == "region"
+    assert region.entity == "region"
+    # One row per region-hour, not per cell-hour.
+    assert region.rows == len(region.cell_ids) * HOURS
+
+    # And the aggregation itself is a sum of counts over a sum of exposure.
+    aggregated = aggregate_to_region(cell.frame)
+    assert aggregated["complaint_count"].sum() == pytest.approx(
+        cell.frame["complaint_count"].sum(),
+    )
+
+
+def test_the_region_grain_frame_passes_the_leakage_gate(window) -> None:
+    """The gate must work at either granularity, or one of them is unguarded."""
+    region = build_feature_frame(FakeSource(), window, now=T0, grain="region")
+    split = split_by_time(region.frame)
+    assert_no_leakage(
+        region.frame,
+        target=region.target,
+        feature_columns=region.feature_columns,
+        split=split,
+        entity=region.entity,
+    )
+
+
+def test_lags_at_region_grain_are_the_regions_own_history(window) -> None:
+    """Grouping by the wrong column silently mixes one region's history into another's."""
+    region = build_feature_frame(FakeSource(), window, now=T0, grain="region")
+    frame = region.frame.sort_values(["region", "ts"]).reset_index(drop=True)
+    lag_column = next(c for c in region.feature_columns if c.endswith("_lag1"))
+    source = lag_column.removesuffix("_lag1")
+
+    for _, group in frame.groupby("region"):
+        # The first row of each region has no history, so its lag must be missing. If the
+        # grouping were wrong it would carry the previous region's last value.
+        assert (
+            group[lag_column].iloc[0] != group[lag_column].iloc[0]
+            or group[lag_column].isna().iloc[0]
+        ), "the first row of a region cannot have a lag"
+        if len(group) > 2:
+            assert group[lag_column].iloc[2] == pytest.approx(group[source].iloc[1])
+
+
+def test_an_unknown_grain_is_refused(window) -> None:
+    with pytest.raises(ValueError, match="grain must be"):
+        build_feature_frame(FakeSource(), window, now=T0, grain="site")

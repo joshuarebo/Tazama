@@ -1,9 +1,9 @@
 # Model card — kpi_anomaly_detector
 
-- **Version** `v2da60515-4c7f`
+- **Version** `v90d788d2-d717`
 - **Algorithm** Robust z-score over hour-of-week baselines (MAD)
-- **Trained on** 2026-02-23 23:00 to 2026-03-16 23:00 UTC (20,160 rows, 40 cells)
-- **Data hash** `2da605152e81a5677c073b04e0702c7f8084117b7eef882d22bcffb980e13bd9`
+- **Trained on** 2026-02-23 23:00 to 2026-03-16 23:00 UTC (2,520 rows, 5 cells)
+- **Data hash** `90d788d2813ddc39dfa1ca08fb788a865b36179acb5a427b63b66e173676a704`
 - **Verdict** Beats its baseline on the held-out test fold.
 
 ## Purpose
@@ -15,16 +15,16 @@ Flags per-cell KPI behaviour that departs from that cell's own hour-of-week norm
 ```json
 {
   "detection": {
-    "precision": 0.0055,
-    "recall": 0.6667,
-    "f1": 0.0108,
-    "true_positives": 4,
-    "false_positives": 729,
-    "false_negatives": 2,
-    "flagged": 733,
-    "labelled": 6,
-    "rows": 20160,
-    "flag_rate": 0.036359
+    "precision": 0.0151,
+    "recall": 0.6,
+    "f1": 0.0295,
+    "true_positives": 18,
+    "false_positives": 1171,
+    "false_negatives": 12,
+    "flagged": 1189,
+    "labelled": 30,
+    "rows": 30240,
+    "flag_rate": 0.039319
   },
   "thresholds": {
     "min_recall": 0.5,

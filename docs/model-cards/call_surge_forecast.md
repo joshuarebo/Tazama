@@ -1,9 +1,9 @@
 # Model card — call_surge_forecast
 
-- **Version** `v2da60515-4c7f`
+- **Version** `v90d788d2-d717`
 - **Algorithm** LightGBM regressor
-- **Trained on** 2026-02-23 23:00 to 2026-03-16 23:00 UTC (20,160 rows, 40 cells)
-- **Data hash** `2da605152e81a5677c073b04e0702c7f8084117b7eef882d22bcffb980e13bd9`
+- **Trained on** 2026-02-23 23:00 to 2026-03-16 23:00 UTC (2,520 rows, 5 cells)
+- **Data hash** `90d788d2813ddc39dfa1ca08fb788a865b36179acb5a427b63b66e173676a704`
 - **Verdict** Beats its baseline on the held-out test fold.
 
 ## Purpose
@@ -15,80 +15,187 @@ One-hour-ahead forecast of complaints per 1,000 subscribers per cell, so care st
 ```json
 {
   "validation": {
-    "mae": 0.008998,
-    "rmse": 0.093407,
-    "r2": -0.009366,
-    "mape": 100.0,
-    "mape_rows": 56,
-    "rows": 2880,
-    "mean_actual": 0.008998
+    "mae": 0.004029,
+    "rmse": 0.005322,
+    "r2": 0.389865,
+    "mape": 47.9142,
+    "mape_rows": 304,
+    "rows": 360,
+    "mean_actual": 0.008686,
+    "pred_std": 0.00448679,
+    "mae_nonzero": 0.004023,
+    "nonzero_rows": 304,
+    "degenerate": false
   },
   "validation_baseline": {
-    "mae": 0.01866,
-    "rmse": 0.127716,
-    "r2": -0.887032,
-    "mape": 98.2143,
-    "mape_rows": 56,
-    "rows": 2880,
-    "mean_actual": 0.008998
+    "mae": 0.005718,
+    "rmse": 0.007715,
+    "r2": -0.282218,
+    "mape": 70.3921,
+    "mape_rows": 304,
+    "rows": 360,
+    "mean_actual": 0.008686,
+    "pred_std": 0.00652384,
+    "mae_nonzero": 0.005958,
+    "nonzero_rows": 304,
+    "degenerate": false
   },
   "test": {
-    "mae": 0.011305,
-    "rmse": 0.106295,
-    "r2": -0.011441,
-    "mape": 100.0,
-    "mape_rows": 71,
-    "rows": 2880,
-    "mean_actual": 0.011305
+    "mae": 0.005655,
+    "rmse": 0.014643,
+    "r2": 0.057222,
+    "mape": 56.4175,
+    "mape_rows": 307,
+    "rows": 360,
+    "mean_actual": 0.009847,
+    "pred_std": 0.00452036,
+    "mae_nonzero": 0.005995,
+    "nonzero_rows": 307,
+    "degenerate": false
   },
   "test_baseline": {
-    "mae": 0.01891,
-    "rmse": 0.130446,
-    "r2": -0.52328,
-    "mape": 94.3662,
-    "mape_rows": 71,
-    "rows": 2880,
-    "mean_actual": 0.011305
+    "mae": 0.006707,
+    "rmse": 0.015141,
+    "r2": -0.007938,
+    "mape": 74.0017,
+    "mape_rows": 307,
+    "rows": 360,
+    "mean_actual": 0.009847,
+    "pred_std": 0.00678712,
+    "mae_nonzero": 0.007317,
+    "nonzero_rows": 307,
+    "degenerate": false
   },
   "comparison": {
     "metric": "test_mae",
-    "baseline": 0.01891,
-    "model": 0.011305,
+    "baseline": 0.006707,
+    "model": 0.005655,
     "beats_baseline": true,
-    "margin": 0.007604,
-    "improvement_pct": 40.2145
+    "margin": 0.001052,
+    "improvement_pct": 15.6821
   },
   "cv_folds": [
     {
       "fold": 1,
-      "train_rows": 1600,
-      "validation_rows": 1520,
-      "mae": 0.004439,
-      "rmse": 0.037667
+      "train_rows": 200,
+      "validation_rows": 190,
+      "mae": 0.004309,
+      "rmse": 0.005453
     },
     {
       "fold": 2,
-      "train_rows": 3120,
-      "validation_rows": 1520,
-      "mae": 0.005983,
-      "rmse": 0.067232
+      "train_rows": 390,
+      "validation_rows": 190,
+      "mae": 0.004162,
+      "rmse": 0.005277
     },
     {
       "fold": 3,
-      "train_rows": 4640,
-      "validation_rows": 1520,
-      "mae": 0.008059,
-      "rmse": 0.085964
+      "train_rows": 580,
+      "validation_rows": 190,
+      "mae": 0.003828,
+      "rmse": 0.00574
     },
     {
       "fold": 4,
-      "train_rows": 6160,
-      "validation_rows": 1520,
-      "mae": 0.009971,
-      "rmse": 0.081696
+      "train_rows": 770,
+      "validation_rows": 190,
+      "mae": 0.004591,
+      "rmse": 0.006108
     }
   ],
-  "drivers": []
+  "drivers": [
+    {
+      "feature": "hour_of_day",
+      "mean_abs_shap": 0.32654147,
+      "direction": "increases",
+      "rank": 1
+    },
+    {
+      "feature": "sinr_db_lag24",
+      "mean_abs_shap": 0.05149381,
+      "direction": "decreases",
+      "rank": 2
+    },
+    {
+      "feature": "active_users_lag24",
+      "mean_abs_shap": 0.03972865,
+      "direction": "increases",
+      "rank": 3
+    },
+    {
+      "feature": "rrc_setup_success_pct_lag24",
+      "mean_abs_shap": 0.03890498,
+      "direction": "decreases",
+      "rank": 4
+    },
+    {
+      "feature": "erab_setup_success_pct_lag1",
+      "mean_abs_shap": 0.03670773,
+      "direction": "decreases",
+      "rank": 5
+    },
+    {
+      "feature": "rrc_setup_success_pct_lag1",
+      "mean_abs_shap": 0.02977754,
+      "direction": "decreases",
+      "rank": 6
+    },
+    {
+      "feature": "is_busy_hour",
+      "mean_abs_shap": 0.02726133,
+      "direction": "increases",
+      "rank": 7
+    },
+    {
+      "feature": "complaint_count_lag2",
+      "mean_abs_shap": 0.02585746,
+      "direction": "increases",
+      "rank": 8
+    },
+    {
+      "feature": "erab_setup_success_pct_lag24",
+      "mean_abs_shap": 0.02531375,
+      "direction": "decreases",
+      "rank": 9
+    },
+    {
+      "feature": "sinr_db_lag1",
+      "mean_abs_shap": 0.02457185,
+      "direction": "decreases",
+      "rank": 10
+    },
+    {
+      "feature": "complaint_count_roll168_mean",
+      "mean_abs_shap": 0.02451678,
+      "direction": "decreases",
+      "rank": 11
+    },
+    {
+      "feature": "complaint_count_roll3_mean",
+      "mean_abs_shap": 0.02380777,
+      "direction": "decreases",
+      "rank": 12
+    },
+    {
+      "feature": "prb_utilisation_pct_lag24",
+      "mean_abs_shap": 0.02347425,
+      "direction": "increases",
+      "rank": 13
+    },
+    {
+      "feature": "active_users_lag1",
+      "mean_abs_shap": 0.02216787,
+      "direction": "increases",
+      "rank": 14
+    },
+    {
+      "feature": "prb_utilisation_pct_lag1",
+      "mean_abs_shap": 0.02124401,
+      "direction": "increases",
+      "rank": 15
+    }
+  ]
 }
 ```
 
@@ -96,7 +203,7 @@ One-hour-ahead forecast of complaints per 1,000 subscribers per cell, so care st
 
 ```json
 {
-  "objective": "regression_l1",
+  "objective": "poisson",
   "n_estimators": 400,
   "learning_rate": 0.05,
   "num_leaves": 31,

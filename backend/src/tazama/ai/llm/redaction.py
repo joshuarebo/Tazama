@@ -18,6 +18,7 @@ because by the time text reaches a card or a log it has already escaped.
 from __future__ import annotations
 
 import re
+from collections.abc import Callable
 from dataclasses import dataclass, field
 
 #: Kenyan MSISDNs in every shape the channels produce, plus loose long digit runs. The
@@ -69,7 +70,7 @@ def redact(text: str) -> Redaction:
     counts: dict[str, int] = {}
     seen: dict[str, str] = {}
 
-    def replace(kind: str):
+    def replace(kind: str) -> Callable[[re.Match[str]], str]:
         def _inner(match: re.Match[str]) -> str:
             value = match.group(0)
             if value in seen:

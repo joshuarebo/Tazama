@@ -317,8 +317,11 @@ def test_the_demo_affordances_are_closed_outside_demo_mode(settings, auth_header
         assert refused.status_code == 422
         assert "demo mode only" in refused.json()["detail"]
         # The real path still works.
-        assert client.post(
-            "/api/v1/care/lookup",
-            json={"identifier": MSISDN},
-            headers=auth_headers("care_agent"),
-        ).status_code == 200
+        assert (
+            client.post(
+                "/api/v1/care/lookup",
+                json={"identifier": MSISDN},
+                headers=auth_headers("care_agent"),
+            ).status_code
+            == 200
+        )

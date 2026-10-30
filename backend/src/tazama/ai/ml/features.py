@@ -121,6 +121,10 @@ _PROBE_ROWS = 5_000
 _TARGET_RHO = 0.999
 
 
+#: The default grouping column. A frame aggregated to another granularity passes its own.
+ENTITY_COLUMN = "cell_id"
+
+
 class LeakageDetected(ValueError):
     """A feature, target or split would let the model see information it cannot have.
 
@@ -240,6 +244,10 @@ class FeatureFrame:
     data_hash: str
     built_at: datetime
     notes: tuple[str, ...] = ()
+    #: The grouping column in `frame` — `cell_id`, or `region` for an aggregated frame.
+    entity: str = ENTITY_COLUMN
+    #: `"cell"` or `"region"`. Recorded so a registry row says what it was trained on.
+    grain: str = "cell"
 
     @property
     def rows(self) -> int:
@@ -440,8 +448,14 @@ def add_lag_features(
     lags: Sequence[int] = DEFAULT_LAGS,
     demand_rolling: Sequence[int] = DEFAULT_DEMAND_ROLLING,
     kpi_rolling: Sequence[int] = DEFAULT_KPI_ROLLING,
+    entity: str = ENTITY_COLUMN,
 ) -> tuple[Any, tuple[str, ...]]:
-    """Add per-cell lagged and rolling features; return `(frame, derived_column_names)`.
+    """Add per-entity lagged and rolling features; return `(frame, derived_column_names)`.
+
+    `entity` is the grouping column — a cell, or a region when the frame is aggregated.
+    The pipeline used to hard-code `cell_id`, which quietly made the whole feature builder
+    unable to work at any other granularity. That mattered: the per-cell-hour target is
+    97% zeros, and a model trained on it learns to predict zero.
 
     Every rolling window is shifted by one hour before it is taken, so it ends strictly
     before `ts`. `min_periods=1` keeps early history usable instead of throwing away the
@@ -450,8 +464,8 @@ def add_lag_features(
     require_ml()
     if any(k < 1 for k in lags):
         raise LeakageDetected(f"lags must be >= 1 hour; got {sorted(lags)}")
-    frame = frame.sort_values(["cell_id", "ts"], kind="stable").reset_index(drop=True)
-    grouped = frame.groupby("cell_id", sort=False, observed=True)
+    frame = frame.sort_values([entity, "ts"], kind="stable").reset_index(drop=True)
+    grouped = frame.groupby(entity, sort=False, observed=True)
     derived: list[str] = []
     new: dict[str, Any] = {}
 
@@ -513,6 +527,43 @@ def select_cells(
     return tuple(ordered if limit is None else ordered[:limit])
 
 
+def aggregate_to_region(frame: Any) -> Any:
+    """Collapse a cell-hour frame to region-hour, before any lag is taken.
+
+    **This is the fix for a target that could not be learned.** Complaints per cell-hour
+    are 97.6% zeros, and no objective can beat a seasonal-naive baseline on a series that
+    is almost always nothing: squared error and L1 both drive the model to a constant zero,
+    which then scores a *better* MAE than a baseline that honestly carries spikes forward.
+    The first version of this gate went green on precisely that — a model with zero
+    prediction variance "beating" the baseline by 40%.
+
+    At region-hour the same data is 16.7% zeros, because a surge is a regional
+    phenomenon. It is also the granularity the forecast is *for*: care staffing is planned
+    per region, never per cell.
+
+    Aggregation happens before the lags are built, so every lagged feature describes the
+    region's own history rather than being an average of per-cell lags.
+    """
+    require_ml()
+
+    counts = ["complaint_count", "care_call_count"]
+    kpis = [c for c in OBSERVED_COLUMNS if c in frame.columns and c not in counts]
+    spec: dict[str, str] = {"subscribers_est": "sum"}
+    spec.update({c: "sum" for c in counts if c in frame.columns})
+    # KPIs average: a region's availability is the mean of its cells', not their sum.
+    spec.update({c: "mean" for c in kpis if c in frame.columns})
+
+    grouped = frame.groupby(["region", "ts"], as_index=False).agg(spec)
+    grouped["complaints_per_1k"] = grouped["complaint_count"] / (
+        grouped["subscribers_est"].clip(lower=1.0) / 1_000.0
+    )
+    if "care_call_count" in grouped.columns:
+        grouped["care_calls_per_1k"] = grouped["care_call_count"] / (
+            grouped["subscribers_est"].clip(lower=1.0) / 1_000.0
+        )
+    return grouped.sort_values(["region", "ts"], kind="stable").reset_index(drop=True)
+
+
 def build_feature_frame(
     source: FeatureSource,
     window: TimeWindow,
@@ -522,9 +573,16 @@ def build_feature_frame(
     tz: ZoneInfo | str = "Africa/Nairobi",
     lags: Sequence[int] = DEFAULT_LAGS,
     now: datetime | None = None,
+    grain: str = "cell",
 ) -> FeatureFrame:
-    """Read the window from the port and build the full feature frame."""
+    """Read the window from the port and build the full feature frame.
+
+    `grain` is `"cell"` or `"region"`. See `aggregate_to_region` for why the region grain
+    exists: the per-cell-hour target is too sparse to learn from.
+    """
     require_ml()
+    if grain not in ("cell", "region"):
+        raise ValueError(f"grain must be 'cell' or 'region'; got {grain!r}")
     cells = select_cells(source.cells(region=region), limit=cell_limit)
     if not cells:
         raise ValueError("no cells available for the requested window")
@@ -537,24 +595,38 @@ def build_feature_frame(
         care_calls=source.care_call_counts(window, cell_ids=cell_ids),
         window=window,
     )
+
+    entity = ENTITY_COLUMN
+    static = STATIC_COLUMNS
+    if grain == "region":
+        frame = aggregate_to_region(frame)
+        entity = "region"
+        # `tech` is per-cell and meaningless once aggregated; exposure survives.
+        static = tuple(c for c in STATIC_COLUMNS if c in frame.columns)
+
     frame = add_calendar_features(frame, tz=tz)
-    frame, derived = add_lag_features(frame, lags=lags)
+    frame, derived = add_lag_features(frame, lags=lags, entity=entity)
 
     # The target is the demand observed during [ts, ts+1h). Every feature is strictly
     # older than ts, so this is a one-hour-ahead forecast with no peeking.
     frame[TARGET_COLUMN] = frame["complaints_per_1k"].astype("float64")
 
-    feature_columns = tuple(derived) + CALENDAR_COLUMNS + STATIC_COLUMNS
+    feature_columns = tuple(derived) + CALENDAR_COLUMNS + static
     observed = [c for c in OBSERVED_COLUMNS if c in frame.columns]
+    entities = (
+        tuple(cell_ids) if grain == "cell" else tuple(sorted(frame["region"].unique().tolist()))
+    )
     return FeatureFrame(
         frame=frame,
         feature_columns=feature_columns,
         target=TARGET_COLUMN,
         window=window,
-        cell_ids=tuple(cell_ids),
-        data_hash=data_hash(frame, columns=["cell_id", *observed]),
+        cell_ids=entities,
+        entity=entity,
+        grain=grain,
+        data_hash=data_hash(frame, columns=[entity, *observed]),
         built_at=now or datetime.now(tz=UTC),
-        notes=(f"cells={len(cell_ids)}", f"lags={tuple(lags)}"),
+        notes=(f"grain={grain}", f"entities={len(entities)}", f"lags={tuple(lags)}"),
     )
 
 
@@ -609,7 +681,7 @@ def max_lag_hours(feature_columns: Sequence[str]) -> int:
     return furthest
 
 
-def _sample(frame: Any) -> Any:
+def _sample(frame: Any, entity: str = ENTITY_COLUMN) -> Any:
     """A subset of **whole cells**, never a stride over rows.
 
     Striding would break the very relationship being checked: row `t` and row `t-1` must
@@ -617,10 +689,10 @@ def _sample(frame: Any) -> Any:
     """
     if len(frame) <= _PROBE_ROWS:
         return frame
-    cells = frame["cell_id"].drop_duplicates().tolist()
-    per_cell = max(1, len(frame) // max(1, len(cells)))
-    keep = max(1, _PROBE_ROWS // per_cell)
-    return frame[frame["cell_id"].isin(set(cells[:keep]))]
+    entities = frame[entity].drop_duplicates().tolist()
+    per_entity = max(1, len(frame) // max(1, len(entities)))
+    keep = max(1, _PROBE_ROWS // per_entity)
+    return frame[frame[entity].isin(set(entities[:keep]))]
 
 
 def _matches(left: Any, right: Any) -> bool:
@@ -663,14 +735,19 @@ def _indeterminate(left: Any, right: Any) -> bool:
     return bool(left[both].nunique() < 2 and right[both].nunique() < 2)
 
 
-def _check_future_looking(frame: Any, feature_columns: Sequence[str], target: str) -> None:
+def _check_future_looking(
+    frame: Any,
+    feature_columns: Sequence[str],
+    target: str,
+    entity: str = ENTITY_COLUMN,
+) -> None:
     """Reject a feature whose values are an observed column at `ts` or later.
 
     Name-independent on purpose: a column called `availability_pct_lag1` that was actually
     built with `shift(-1)` is caught here, and so is anything called `_next` or `_lead`.
     """
-    sample = _sample(frame)
-    grouped = sample.groupby("cell_id", sort=False, observed=True)
+    sample = _sample(frame, entity)
+    grouped = sample.groupby(entity, sort=False, observed=True)
     sources = [c for c in (*OBSERVED_COLUMNS, target) if c in sample.columns]
     shifted: dict[tuple[str, int], Any] = {
         (src, k): (grouped[src].shift(-k) if k else sample[src])
@@ -690,14 +767,18 @@ def _check_future_looking(frame: Any, feature_columns: Sequence[str], target: st
                 )
 
 
-def _check_derived_alignment(frame: Any, feature_columns: Sequence[str]) -> None:
+def _check_derived_alignment(
+    frame: Any,
+    feature_columns: Sequence[str],
+    entity: str = ENTITY_COLUMN,
+) -> None:
     """Re-derive every `_lagN` / `_rollW_mean` feature and insist the values match.
 
     This is the check that catches a rolling mean including the current row: the shifted
     and unshifted windows are both computed and the mismatch is named precisely.
     """
-    sample = _sample(frame)
-    grouped = sample.groupby("cell_id", sort=False, observed=True)
+    sample = _sample(frame, entity)
+    grouped = sample.groupby(entity, sort=False, observed=True)
     for name in feature_columns:
         lag = _LAG_RE.match(name)
         if lag:
@@ -740,13 +821,18 @@ def _check_derived_alignment(frame: Any, feature_columns: Sequence[str]) -> None
         )
 
 
-def _check_target_disguise(frame: Any, feature_columns: Sequence[str], target: str) -> None:
+def _check_target_disguise(
+    frame: Any,
+    feature_columns: Sequence[str],
+    target: str,
+    entity: str = ENTITY_COLUMN,
+) -> None:
     """Reject a feature that is the target under a monotone transform.
 
     Spearman rather than Pearson, so `target * 10`, `log1p(target)` and any rank-preserving
     rescale are caught, not just an exact copy.
     """
-    sample = _sample(frame)
+    sample = _sample(frame, entity)
     y = sample[target]
     if int(y.notna().sum()) < 20 or y.nunique() < 3:
         return
@@ -803,6 +889,7 @@ def assert_no_leakage(
     target: str,
     feature_columns: Sequence[str],
     split: TimeSplit | None = None,
+    entity: str = ENTITY_COLUMN,
 ) -> None:
     """The gate. Raise `LeakageDetected` with a precise message, or return silently.
 
@@ -828,8 +915,8 @@ def assert_no_leakage(
             f"features {sorted(contemporaneous)} are values observed at t; only lagged or "
             f"calendar information is available when the forecast is made",
         )
-    _check_derived_alignment(frame, features)
-    _check_future_looking(frame, features, target)
-    _check_target_disguise(frame, features, target)
+    _check_derived_alignment(frame, features, entity)
+    _check_future_looking(frame, features, target, entity)
+    _check_target_disguise(frame, features, target, entity)
     if split is not None:
         _check_split(frame, split, features)

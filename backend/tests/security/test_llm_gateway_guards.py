@@ -161,7 +161,7 @@ def test_an_identifier_in_a_tool_argument_degrades(settings) -> None:
 
 
 def test_the_repair_attempt_gets_the_same_outbound_check(settings) -> None:
-    """"Return valid JSON" must not be a route around the identifier filter."""
+    """ "Return valid JSON" must not be a route around the identifier filter."""
     responses = iter(
         [
             # First: invalid shape, so a repair is attempted.
@@ -327,10 +327,13 @@ def test_a_notification_slot_cannot_smuggle_free_text() -> None:
                 "message": "We are terribly sorry about the outage and will credit you soon",
             },
         )
-    assert NotificationFill(
-        template_id="known_issue",
-        slots={"area": "Westlands", "eta_minutes": "90"},
-    ).slots["area"] == "Westlands"
+    assert (
+        NotificationFill(
+            template_id="known_issue",
+            slots={"area": "Westlands", "eta_minutes": "90"},
+        ).slots["area"]
+        == "Westlands"
+    )
 
 
 def test_a_diagnosis_cannot_invent_a_cause() -> None:

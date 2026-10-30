@@ -348,7 +348,7 @@ def replay() -> None:
 
 @task("train", "Train the Phase 3 models and refresh the registry", "data")
 def train() -> None:
-    uv_run(["python", "-m", "tazama.ai.ml.training"], cwd=BACKEND)
+    uv_run(["python", "-m", "tazama.training"], cwd=BACKEND)
 
 
 @task("openapi", "Export the OpenAPI document to docs/openapi.json", "data")

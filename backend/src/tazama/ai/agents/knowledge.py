@@ -22,8 +22,8 @@ from dataclasses import dataclass
 from typing import Any
 
 from tazama.ai.agents.harness import AgentTrace, Budget, BudgetExhausted, ToolRegistry
+from tazama.ai.agents.ports import LlmPort
 from tazama.ai.agents.tools import CEILINGS, GRANTS
-from tazama.ai.llm.gateway import LlmGateway
 from tazama.ai.llm.schemas import KnowledgeAnswer
 from tazama.core.logging import get_logger
 
@@ -82,7 +82,7 @@ class KnowledgeAssistant:
         self,
         *,
         registry: ToolRegistry,
-        gateway: LlmGateway | None = None,
+        gateway: LlmPort | None = None,
         budget: Budget | None = None,
     ) -> None:
         self._registry = registry
@@ -173,7 +173,12 @@ class KnowledgeAssistant:
                 sufficient=bool(str(best.get("text", "")).strip()),
                 method="retrieval-only",
                 trace=self._trace(
-                    question, steps, calls, budget, result.note or "model degraded", degraded=True,
+                    question,
+                    steps,
+                    calls,
+                    budget,
+                    result.note or "model degraded",
+                    degraded=True,
                 ),
             )
 
@@ -188,7 +193,11 @@ class KnowledgeAssistant:
             steps.append(f"rejected: cited documents that were not retrieved ({sorted(invented)})")
             _log.warning("knowledge_fabricated_citation", extra={"invented": sorted(invented)})
             return self._decline(
-                question, steps, calls, budget, "the answer cited documents that do not exist",
+                question,
+                steps,
+                calls,
+                budget,
+                "the answer cited documents that do not exist",
             )
 
         if not answer.sufficient_evidence or not answer.citations:

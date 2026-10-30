@@ -231,16 +231,24 @@ def test_an_incident_gains_impact_priority_and_a_team(harness: Harness) -> None:
         assert incident.affected_subs > 0
 
         # Prioritisation and routing ran, and said why.
-        decisions = session.execute(
-            select(m.AuditLog).where(m.AuditLog.entity_id == complaint.incident_id),
-        ).scalars().all()
+        decisions = (
+            session.execute(
+                select(m.AuditLog).where(m.AuditLog.entity_id == complaint.incident_id),
+            )
+            .scalars()
+            .all()
+        )
         actions = {row.action for row in decisions}
         assert "prioritise" in actions
-        routed = session.execute(
-            select(m.AuditLog)
-            .where(m.AuditLog.action == "route")
-            .where(m.AuditLog.entity_id == f"CASE-{complaint.incident_id}"),
-        ).scalars().all()
+        routed = (
+            session.execute(
+                select(m.AuditLog)
+                .where(m.AuditLog.action == "route")
+                .where(m.AuditLog.entity_id == f"CASE-{complaint.incident_id}"),
+            )
+            .scalars()
+            .all()
+        )
         assert routed, "routing should have recorded a decision for the case"
         assert routed[0].outcome  # a named team
         assert routed[0].rule_version == harness.policies.rule_version

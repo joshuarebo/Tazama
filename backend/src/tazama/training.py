@@ -1,8 +1,10 @@
 """`make train` — the Phase 3 training run, end to end and reproducible.
 
-This is the composition root for machine learning. `ai/ml` is forbidden from importing
-infrastructure (the layered import contract), so the adapters are wired here and nowhere
-else, exactly as `api/deps.py` does for the request path.
+This is the composition root for machine learning, and it lives beside `composition.py`
+rather than inside `ai/ml/` for a reason the import-linter made concrete: `ai/` may not
+import `infrastructure/`, and a training run must read the database. Putting the wiring
+here keeps `ai/ml/` pure — every module in it takes its data through a port — and keeps the
+one place that knows about both layers in the layer that is allowed to.
 
 What one run does, in order:
 
@@ -53,9 +55,21 @@ _log = get_logger(__name__)
 #: cell: enough for an hour-of-week profile, and all the seed produces.
 DEFAULT_DAYS = 30
 
-#: How many cells to train on. The full network is ~600 cells x 720 hours, which is more
-#: than a demo laptop should spend on `make train`; the subsample is hash-ordered, never
-#: volume-ordered, so it does not select on the target.
+#: The granularity the forecast is trained at. `region`, not `cell`: complaints per
+#: cell-hour are 97.6% zeros, and on a target that sparse every objective collapses to a
+#: constant zero which then scores a better MAE than an honest baseline. At region-hour the
+#: same data is 16.7% zeros — and a care-staffing forecast is a regional question anyway.
+DEFAULT_GRAIN = "region"
+
+#: How many cells the *cell-grain* paths read. The full network is ~600 cells x 720 hours,
+#: which is more than a demo laptop should spend on `make train`; the subsample is
+#: hash-ordered, never volume-ordered, so it does not select on the target.
+#:
+#: At region grain this limit must not apply. A regional complaint rate computed from an
+#: arbitrary 10% of the region's cells is not that region's rate — it is a rate over a
+#: sample, with the denominator to match — and it measurably weakened the signal: the same
+#: model went from beating the baseline by 18% to losing by 3% purely because of the
+#: subsample. `None` is therefore the region-grain default.
 DEFAULT_CELL_LIMIT = 60
 
 #: The forecast must beat seasonal-naive by this much on test MAE to be activated. Not
@@ -91,6 +105,10 @@ class TrainingReport:
     cells: int
     data_hash: str
     forecast: ForecastOutcome
+    #: True when the model emits one value regardless of input. Fails the gate on its own.
+    forecast_degenerate: bool
+    #: Whether the model beats the baseline on the rows where something actually happened.
+    forecast_beats_on_spikes: bool
     anomaly_metrics: dict[str, Any]
     registered: tuple[str, ...]
     cards: tuple[str, ...]
@@ -106,9 +124,16 @@ class TrainingReport:
             f"data_hash={self.data_hash[:12]}",
             "",
             "  call-surge forecast (lower MAE is better)",
-            f"    baseline  test MAE {self.forecast.test_baseline.mae:.4f}",
-            f"    model     test MAE {self.forecast.test_model.mae:.4f}",
+            f"    baseline  test MAE {self.forecast.test_baseline.mae:.4f}"
+            f"  (on the {self.forecast.test_baseline.nonzero_rows} rows with demand: "
+            f"{self.forecast.test_baseline.mae_nonzero:.4f})",
+            f"    model     test MAE {self.forecast.test_model.mae:.4f}"
+            f"  (on the same rows: {self.forecast.test_model.mae_nonzero:.4f})",
+            f"    spread    prediction std {self.forecast.test_model.pred_std:.6f}"
+            + ("  << CONSTANT PREDICTOR" if self.forecast_degenerate else ""),
             f"    verdict   {comparison.summary()}",
+            f"              beats the baseline where demand exists: "
+            f"{'yes' if self.forecast_beats_on_spikes else 'NO'}",
             "",
             "  KPI anomaly detection vs seeded incident windows",
             f"    recall {self.anomaly_metrics.get('recall', 0.0):.3f}"
@@ -126,8 +151,7 @@ class TrainingReport:
             lines.append("  top drivers (SHAP, mean |contribution|)")
             for driver in self.forecast.drivers[:8]:
                 lines.append(
-                    f"    {driver.feature:<34} {driver.mean_abs_shap:.3e}  "
-                    f"{driver.direction}",
+                    f"    {driver.feature:<34} {driver.mean_abs_shap:.3e}  {driver.direction}",
                 )
         return "\n".join(lines)
 
@@ -155,6 +179,7 @@ def build_frame(
     cell_limit: int | None = DEFAULT_CELL_LIMIT,
     region: str | None = None,
     clock: Clock | None = None,
+    grain: str = DEFAULT_GRAIN,
 ) -> tuple[FeatureFrame, TimeSplit]:
     """The frame and its split, anchored on the data rather than the wall clock."""
     from tazama.domain.value_objects import TimeWindow
@@ -173,11 +198,15 @@ def build_frame(
         region=region,
         tz=settings.DISPLAY_TZ,
         now=(clock or SystemClock()).now(),
+        grain=grain,
     )
     return features, split_by_time(features.frame)
 
 
-def _train_anomaly(features: FeatureFrame, engine: Any) -> tuple[RobustZScoreDetector, dict]:
+def _train_anomaly(
+    features: FeatureFrame,
+    engine: Any,
+) -> tuple[RobustZScoreDetector, dict[str, Any]]:
     """Fit the detector and score it against the seeded incident windows."""
     from sqlalchemy import select
 
@@ -316,10 +345,13 @@ def run(
     with_shap: bool = True,
     activate: bool = True,
     write_cards: bool = True,
+    grain: str = DEFAULT_GRAIN,
 ) -> TrainingReport:
     """Train, evaluate, register and report. Raises nothing on a failed gate — see `passed`."""
     resolved = settings or get_settings()
     the_clock = clock or SystemClock()
+    # A regional rate must cover the whole region; see DEFAULT_CELL_LIMIT.
+    forecast_cell_limit = None if grain == "region" else cell_limit
 
     from tazama.infrastructure.db.engine import get_engine
     from tazama.infrastructure.db.ml_repo import SqlEvalRunSink, SqlModelRegistryStore
@@ -329,9 +361,10 @@ def run(
         settings=resolved,
         engine=engine,
         days=days,
-        cell_limit=cell_limit,
+        cell_limit=forecast_cell_limit,
         region=region,
         clock=the_clock,
+        grain=grain,
     )
     _log.info("frame built", extra={"frame": features.describe()})
 
@@ -341,7 +374,18 @@ def run(
         with_shap=with_shap,
         min_improvement_pct=MIN_IMPROVEMENT_PCT,
     )
-    detector, anomaly_metrics = _train_anomaly(features, engine)
+    # The detector works per cell: a region-level average hides exactly the single-cell
+    # collapse it exists to find. So it gets its own cell-grain frame.
+    cell_features, _ = build_frame(
+        settings=resolved,
+        engine=engine,
+        days=days,
+        cell_limit=cell_limit,
+        region=region,
+        clock=the_clock,
+        grain="cell",
+    )
+    detector, anomaly_metrics = _train_anomaly(cell_features, engine)
 
     # The version is derived from the data and from the gate it was judged against, not
     # from the clock: the same data under the same thresholds must produce the same
@@ -355,6 +399,7 @@ def run(
                 "forecast_min_improvement_pct": MIN_IMPROVEMENT_PCT,
                 "anomaly_min_recall": ANOMALY_MIN_RECALL,
                 "anomaly_max_flag_rate": ANOMALY_MAX_FLAG_RATE,
+                "forecast_grain": grain,
             },
             sort_keys=True,
         ).encode(),
@@ -482,7 +527,19 @@ def run(
                 ),
             )
 
-    passed = bool(forecast.beats_baseline) and anomaly_passed
+    # Two further conditions on the forecast, both learned the hard way.
+    #
+    # The target — complaints per 1,000 subscribers per cell-hour — is about 97% zeros, and
+    # on a target like that a model which predicts a constant zero scores a *better* MAE
+    # than a seasonal-naive baseline that honestly carries last week's spikes forward. The
+    # first run of this gate went green on exactly that: a 40% "win" by a model whose
+    # predictions had zero variance. So the overall MAE comparison is necessary but
+    # nowhere near sufficient.
+    degenerate = forecast.test_model.degenerate or forecast.validation_model.degenerate
+    beats_on_spikes = forecast.test_model.mae_nonzero < forecast.test_baseline.mae_nonzero
+    forecast_passed = bool(forecast.beats_baseline) and not degenerate and beats_on_spikes
+
+    passed = forecast_passed and anomaly_passed
     started = the_clock.now()
     SqlEvalRunSink(engine=engine, clock=the_clock).record(
         EvalRunRecord(
@@ -496,6 +553,8 @@ def run(
             },
             thresholds={
                 "forecast_min_improvement_pct": MIN_IMPROVEMENT_PCT,
+                "forecast_must_not_be_degenerate": True,
+                "forecast_must_beat_baseline_on_nonzero_rows": True,
                 "anomaly_min_recall": ANOMALY_MIN_RECALL,
                 "anomaly_max_flag_rate": ANOMALY_MAX_FLAG_RATE,
             },
@@ -512,6 +571,8 @@ def run(
         cells=len(features.cell_ids),
         data_hash=features.data_hash,
         forecast=forecast,
+        forecast_degenerate=degenerate,
+        forecast_beats_on_spikes=beats_on_spikes,
         anomaly_metrics=anomaly_metrics,
         registered=tuple(registered),
         cards=tuple(cards),
@@ -522,10 +583,21 @@ def run(
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Train the Phase 3 models.")
     parser.add_argument("--days", type=int, default=DEFAULT_DAYS)
-    parser.add_argument("--cells", type=int, default=DEFAULT_CELL_LIMIT)
+    parser.add_argument(
+        "--cells",
+        type=int,
+        default=DEFAULT_CELL_LIMIT,
+        help="cell subsample for the anomaly detector; ignored by the region-grain forecast",
+    )
     parser.add_argument("--region", default=None)
     parser.add_argument("--version", default=None, help="override the derived version")
     parser.add_argument("--no-shap", action="store_true", help="skip SHAP (faster)")
+    parser.add_argument(
+        "--grain",
+        default=DEFAULT_GRAIN,
+        choices=("cell", "region"),
+        help="forecast granularity; cell is too sparse to learn and is kept for comparison",
+    )
     parser.add_argument("--no-activate", action="store_true")
     args = parser.parse_args(argv)
 
@@ -544,6 +616,7 @@ def main(argv: list[str] | None = None) -> int:
         version=args.version,
         with_shap=not args.no_shap,
         activate=not args.no_activate,
+        grain=args.grain,
     )
     print(report.render())  # noqa: T201 - this is a CLI
 

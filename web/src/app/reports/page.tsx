@@ -176,7 +176,14 @@ export default function ReportsPage() {
                 </span>
               }
             >
-              <pre className="max-h-[32rem] overflow-auto rounded border border-line bg-surface-sunken p-3 font-mono text-xs">
+              {/* A scrollable region needs keyboard access, or a keyboard user cannot
+                  reach the rest of the payload (axe: scrollable-region-focusable). */}
+              <pre
+                tabIndex={0}
+                role="region"
+                aria-label="Adaptive Card payload as JSON"
+                className="max-h-[32rem] overflow-auto rounded border border-line bg-surface-sunken p-3 font-mono text-xs"
+              >
                 {JSON.stringify(digest.data.card, null, 2)}
               </pre>
             </Card>

@@ -18,7 +18,18 @@ from __future__ import annotations
 from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass
-from typing import Any
+from datetime import datetime, timedelta
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:  # pragma: no cover - annotations only
+    # The concrete readers are imported inside `build_services` so this module stays
+    # import-light and the layering contract holds. For type checking they are needed by
+    # name, and `from __future__ import annotations` keeps the runtime cost at zero.
+    from tazama.infrastructure.db.kpi_repo import (
+        SqlAlarmReader,
+        SqlComplaintReader,
+        SqlKpiReader,
+    )
 
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session
@@ -28,6 +39,7 @@ from tazama.core.logging import get_logger
 from tazama.core.policy import Policies, get_policies
 from tazama.core.security import Pseudonymiser
 from tazama.core.settings import Settings, get_settings
+from tazama.domain.value_objects import KpiName, TimeWindow
 from tazama.infrastructure.db.audit_repo import SqlAuditSink
 from tazama.infrastructure.db.engine import get_engine, session_factory
 from tazama.infrastructure.eventbus import SessionOutboxWriter
@@ -155,6 +167,93 @@ class _SubscriberPositions:
             last_seen_at=snapshot.last_seen_at,
             is_roaming=snapshot.is_roaming,
         )
+
+
+class _VerificationKpis:
+    """Adapts `SqlKpiReader` to verification's `KpiReader` port.
+
+    The vocabularies genuinely differ and neither is wrong: the repository speaks
+    `cell_id` and `KpiName` because that is what the table holds, while verification
+    speaks `element_id` and `str` because it verifies recovery of *elements*, which may be
+    a cell today and a sector tomorrow. Translating here is what a composition root is
+    for — and it is not cosmetic: the port is keyword-only with different parameter names,
+    so passing the repository directly raised `TypeError` on the first call. Verification
+    had never run against a real adapter.
+    """
+
+    __slots__ = ("_reader",)
+
+    def __init__(self, reader: SqlKpiReader) -> None:
+        self._reader = reader
+
+    def baseline(self, *, element_id: str, kpi: str, window: TimeWindow) -> float | None:
+        value = self._reader.baseline(element_id, _kpi_name(kpi), window)
+        return None if value is None else float(value)
+
+    def current(self, *, element_id: str, kpi: str, window: TimeWindow) -> float | None:
+        # The repository has one windowed mean; "baseline" and "current" are the *windows*,
+        # not different maths. Verification keeps them as separate methods so that a caller
+        # cannot accidentally compare a window with itself.
+        value = self._reader.baseline(element_id, _kpi_name(kpi), window)
+        return None if value is None else float(value)
+
+
+class _VerificationAlarms:
+    """Adapts `SqlAlarmReader` to verification's `AlarmReader` port."""
+
+    __slots__ = ("_reader",)
+
+    def __init__(self, reader: SqlAlarmReader) -> None:
+        self._reader = reader
+
+    def open_alarms(self, *, element_ids: Sequence[str], at: datetime) -> tuple[str, ...]:
+        """Ids of alarms still raised at `at`.
+
+        `at` is a point, and the repository reads windows, so the lookback below is the
+        translation. An hour is enough to catch an alarm raised before the quiet period
+        began and still open — which is exactly the case verification must not miss, since
+        a still-raised alarm means the fault has not cleared.
+        """
+        window = TimeWindow(start=at - timedelta(hours=1), end=at + timedelta(minutes=1))
+        open_ids: list[str] = []
+        for element_id in element_ids:
+            open_ids.extend(
+                record.alarm_id
+                for record in self._reader.for_element(element_id, window)
+                if record.cleared_at is None or record.cleared_at > at
+            )
+        return tuple(dict.fromkeys(open_ids))
+
+
+class _VerificationComplaints:
+    """Adapts `SqlComplaintReader` to verification's `ComplaintCounter` port."""
+
+    __slots__ = ("_reader",)
+
+    def __init__(self, reader: SqlComplaintReader) -> None:
+        self._reader = reader
+
+    def count_since(self, *, element_ids: Sequence[str], since: datetime) -> int:
+        """Network complaints on these elements since `since`.
+
+        The window ends a minute in the future rather than at `since`: `TimeWindow` is
+        half-open and refuses a zero-length window, and a complaint arriving in the same
+        second as the check should count.
+        """
+        if not element_ids:
+            return 0
+        window = TimeWindow(start=since, end=since + timedelta(days=30))
+        wanted = set(element_ids)
+        return sum(
+            1
+            for observation in self._reader.in_window(window, tuple(wanted))
+            if observation.cell_id in wanted
+        )
+
+
+def _kpi_name(kpi: str) -> KpiName:
+    """Verification names KPIs as strings; the repository needs the enum."""
+    return kpi if isinstance(kpi, KpiName) else KpiName(kpi)
 
 
 class _VerificationIncidents:
@@ -365,9 +464,9 @@ def build_services(
                 link_store,
                 SqlKpiFacts(session=session),
             ),
-            kpis=SqlKpiReader(session=session),
-            alarms=SqlAlarmReader(session=session),
-            complaints=SqlComplaintReader(session=session),
+            kpis=_VerificationKpis(SqlKpiReader(session=session)),
+            alarms=_VerificationAlarms(SqlAlarmReader(session=session)),
+            complaints=_VerificationComplaints(SqlComplaintReader(session=session)),
             publisher=outbox,
             decisions=decisions,
             clock=clock,

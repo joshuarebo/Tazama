@@ -353,27 +353,35 @@ def _known_issue(
 
     incident: Any = None
     if cell_id:
-        incident = session.execute(
-            select(Incident)
-            .join(IncidentLink, IncidentLink.incident_id == Incident.id)
-            .where(IncidentLink.entity_type == "cell")
-            .where(IncidentLink.entity_id == cell_id)
-            .where(Incident.resolved_at.is_(None))
-            .where(or_(*[Incident.status == status for status in open_statuses]))
-            .order_by(Incident.detected_at.desc())
-            .limit(1),
-        ).scalars().first()
+        incident = (
+            session.execute(
+                select(Incident)
+                .join(IncidentLink, IncidentLink.incident_id == Incident.id)
+                .where(IncidentLink.entity_type == "cell")
+                .where(IncidentLink.entity_id == cell_id)
+                .where(Incident.resolved_at.is_(None))
+                .where(or_(*[Incident.status == status for status in open_statuses]))
+                .order_by(Incident.detected_at.desc())
+                .limit(1),
+            )
+            .scalars()
+            .first()
+        )
 
     if incident is None and cell_id:
         notes.append("No live incident on this subscriber's serving cell.")
-        incident = session.execute(
-            select(Incident)
-            .where(Incident.region == region)
-            .where(Incident.resolved_at.is_(None))
-            .where(or_(*[Incident.status == status for status in open_statuses]))
-            .order_by(Incident.detected_at.desc())
-            .limit(1),
-        ).scalars().first()
+        incident = (
+            session.execute(
+                select(Incident)
+                .where(Incident.region == region)
+                .where(Incident.resolved_at.is_(None))
+                .where(or_(*[Incident.status == status for status in open_statuses]))
+                .order_by(Incident.detected_at.desc())
+                .limit(1),
+            )
+            .scalars()
+            .first()
+        )
         if incident is not None:
             notes.append(
                 f"There is a live incident elsewhere in {region}. It may not affect this "

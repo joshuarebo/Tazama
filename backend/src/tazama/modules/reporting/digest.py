@@ -76,7 +76,7 @@ def assert_no_pii(payload: Any) -> None:
 
 def _local(value: Any, tz: str) -> str:
     try:
-        return value.astimezone(ZoneInfo(tz)).strftime("%d %b %H:%M")
+        return str(value.astimezone(ZoneInfo(tz)).strftime("%d %b %H:%M"))
     except Exception:
         return str(value)
 

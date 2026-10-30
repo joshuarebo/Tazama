@@ -22,7 +22,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from tazama.ai.agents.harness import AgentTrace, Budget, BudgetExhausted, ToolRegistry
-from tazama.ai.llm.gateway import LlmGateway
+from tazama.ai.agents.ports import LlmPort
 from tazama.ai.llm.schemas import ReportDigest
 from tazama.core.logging import get_logger
 
@@ -77,7 +77,7 @@ class Reporter:
         self,
         *,
         registry: ToolRegistry,
-        gateway: LlmGateway | None = None,
+        gateway: LlmPort | None = None,
         budget: Budget | None = None,
     ) -> None:
         self._registry = registry
@@ -146,7 +146,11 @@ class Reporter:
                 bullets=deterministic[1],
                 method="deterministic",
                 trace=self._trace(
-                    steps, calls, budget, result.note or "model degraded", degraded=True,
+                    steps,
+                    calls,
+                    budget,
+                    result.note or "model degraded",
+                    degraded=True,
                 ),
             )
 

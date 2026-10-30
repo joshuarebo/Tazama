@@ -314,9 +314,7 @@ async def overview(session: SessionDep) -> Overview:
         ),
         complaints_24h=int(
             session.execute(
-                select(func.count())
-                .select_from(Complaint)
-                .where(Complaint.received_at >= since),
+                select(func.count()).select_from(Complaint).where(Complaint.received_at >= since),
             ).scalar_one(),
         ),
         complaints_correlated=int(
@@ -426,14 +424,18 @@ async def incident_detail(
     window_end = (row.resolved_at or row.detected_at) + CHART_PADDING
     series: list[KpiSeries] = []
     for cell_id in cell_ids[:4]:  # four cells is as much as a card can show usefully
-        points = session.execute(
-            select(KpiCell)
-            .where(KpiCell.cell_id == cell_id)
-            .where(KpiCell.granularity == "1h")
-            .where(KpiCell.bucket_start >= window_start)
-            .where(KpiCell.bucket_start < window_end)
-            .order_by(KpiCell.bucket_start),
-        ).scalars().all()
+        points = (
+            session.execute(
+                select(KpiCell)
+                .where(KpiCell.cell_id == cell_id)
+                .where(KpiCell.granularity == "1h")
+                .where(KpiCell.bucket_start >= window_start)
+                .where(KpiCell.bucket_start < window_end)
+                .order_by(KpiCell.bucket_start),
+            )
+            .scalars()
+            .all()
+        )
         if not points:
             continue
         series.append(
