@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import argparse
 import sys
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, timedelta
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -24,7 +24,12 @@ sys.path.insert(0, str(ROOT / "backend" / "src"))
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Detect incidents in the seeded data")
-    parser.add_argument("--hours", type=int, default=36, help="window to scan, backwards from the end of the data")
+    parser.add_argument(
+        "--hours",
+        type=int,
+        default=36,
+        help="window to scan, backwards from the end of the data",
+    )
     parser.add_argument("--quiet", action="store_true", help="only print the summary")
     args = parser.parse_args()
 
@@ -44,13 +49,19 @@ def main() -> int:
     from tazama.modules.routing.models import RoutingInputs
 
     settings = get_settings()
-    configure_logging(level="WARNING" if args.quiet else "INFO", service="tazama-pipeline", mode=settings.APP_MODE)
+    configure_logging(
+        level="WARNING" if args.quiet else "INFO",
+        service="tazama-pipeline",
+        mode=settings.APP_MODE,
+    )
     engine = get_engine(settings)
 
     # Anchor on the data, not on today: the seed's window is in its own past.
     with session_factory(engine)() as session:
         latest = session.execute(select(func.max(m.KpiCell.bucket_start))).scalar_one_or_none()
-        complaints_total = session.execute(select(func.count()).select_from(m.Complaint)).scalar_one()
+        complaints_total = session.execute(
+            select(func.count()).select_from(m.Complaint),
+        ).scalar_one()
     if latest is None:
         print("no KPI data found - run `make seed` first")  # noqa: T201
         return 1
@@ -133,6 +144,31 @@ def main() -> int:
                     stored.status = "correlated"
                     attached += 1
     print(f"classified {enriched:,} complaint(s); attached {attached:,} to incidents")  # noqa: T201
+
+    # 2b. Back-fill `complaint.incident_id` from correlation's own links.
+    #
+    # The per-complaint write-back above only fires when the *returned* outcome says a live
+    # incident exists because of that complaint, and it disagreed with reality: correlation
+    # had written 69 `incident_link` rows while every `complaint.incident_id` stayed null.
+    # `incident_link` is the authoritative record — correlation writes it as part of its own
+    # transaction — and `complaint.incident_id` is a denormalised convenience the console
+    # reads. Deriving the second from the first in one statement removes the chance of them
+    # disagreeing at all, which per-row bookkeeping in a script cannot guarantee.
+    with session_factory(engine)() as session, session.begin():
+        links = session.execute(
+            select(m.IncidentLink.entity_id, m.IncidentLink.incident_id)
+            .join(m.Incident, m.Incident.id == m.IncidentLink.incident_id)
+            .where(m.IncidentLink.entity_type == "complaint")
+            .where(m.Incident.suppressed_reason.is_(None)),
+        ).all()
+        back_filled = 0
+        for complaint_id, incident_id in links:
+            complaint = session.get(m.Complaint, complaint_id)
+            if complaint is not None and not complaint.incident_id:
+                complaint.incident_id = incident_id
+                complaint.status = "correlated"
+                back_filled += 1
+    print(f"back-filled {back_filled:,} complaint(s) from incident links")  # noqa: T201
 
     # 3. Impact, priority and routing for every live incident.
     with session_factory(engine)() as session:

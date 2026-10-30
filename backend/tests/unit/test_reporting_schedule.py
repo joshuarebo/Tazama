@@ -262,7 +262,13 @@ def test_the_webhook_url_never_appears_in_an_outcome(settings) -> None:
 
     from tazama.infrastructure.adapters.teams.live_stub import WorkflowsTeamsSender
 
-    secret_url = "https://prod-99.westeurope.logic.azure.com/workflows/SECRETVALUE/triggers"
+    # A real Workflows URL shape on purpose — the test plants a recognisable token in it
+    # and asserts the token is absent from the outcome. The secret scanner is right to
+    # flag the shape, which is why it carries the suppression rather than being weakened.
+    secret_url = (
+        "https://prod-99.westeurope.logic.azure.com"  # pragma: allowlist secret
+        "/workflows/SECRETVALUE/triggers"
+    )
     live = settings.model_copy(
         update={
             "TEAMS_DRY_RUN": False,

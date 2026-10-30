@@ -141,11 +141,27 @@ test("the dark theme keeps text readable", async ({ page }) => {
 test("reduced motion is honoured", async ({ page }) => {
   await page.emulateMedia({ reducedMotion: "reduce" });
   await signIn(page, "Admin");
-  // The loading pulse is the only animation; under reduced motion it must not animate.
-  const animated = await page.evaluate(() => {
-    const element = document.querySelector(".animate-pulse");
-    if (!element) return "none";
-    return getComputedStyle(element).animationName;
+  // Assert the *duration*, not the animation name. `tokens.css` keeps the keyframes and
+  // collapses the duration to ~0, which is the standard reduced-motion reset: an animation
+  // that conveys state still conveys it, it just arrives instantly. Checking for
+  // `animation-name: none` would have demanded a worse implementation.
+  const timing = await page.evaluate(() => {
+    const probe = document.createElement("div");
+    probe.className = "animate-pulse";
+    document.body.appendChild(probe);
+    const style = getComputedStyle(probe);
+    const result = {
+      duration: style.animationDuration,
+      transition: style.transitionDuration,
+    };
+    probe.remove();
+    return result;
   });
-  expect(["none", "none, none"]).toContain(animated);
+
+  const seconds = (value: string) =>
+    value.endsWith("ms") ? Number.parseFloat(value) / 1000 : Number.parseFloat(value);
+
+  expect(seconds(timing.duration), `animation-duration was ${timing.duration}`).toBeLessThan(
+    0.01,
+  );
 });

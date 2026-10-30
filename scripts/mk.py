@@ -332,6 +332,23 @@ def seed() -> None:
     uv_run(["python", str(ROOT / "scripts" / "seed.py"), "--reset"], cwd=ROOT)
 
 
+@task(
+    "pipeline",
+    "Run detection over the seeded data so there are incidents to look at",
+    "data",
+    ("seed",),
+)
+def pipeline() -> None:
+    """Turn seeded raw data into detected incidents.
+
+    Seeding writes complaints, KPIs and alarms; it does not decide that any of them add up
+    to an incident. Without this step a freshly seeded console is *correct* and shows
+    nothing, which reads as a broken demo rather than a quiet network — so `make demo`
+    runs it.
+    """
+    uv_run(["python", str(ROOT / "scripts" / "run_pipeline.py")], cwd=ROOT)
+
+
 @task("catalog", "Regenerate docs/data-catalog.md and the join-coverage report", "data")
 def catalog() -> None:
     uv_run(["python", str(ROOT / "scripts" / "catalog.py")], cwd=ROOT)
@@ -452,6 +469,8 @@ def demo() -> None:
     bootstrap()
     migrate()
     seed()
+    # Detection, not just data: see `pipeline`.
+    pipeline()
     catalog()
     web_install()
     say("", "")
