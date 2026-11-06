@@ -13,6 +13,7 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 
+import { AiDiagnosis } from "@/features/AiDiagnosis";
 import { IncidentMap } from "@/features/IncidentMap";
 import { KpiChart } from "@/features/KpiChart";
 import {
@@ -167,6 +168,10 @@ export default function IncidentCard() {
           </div>
         )}
       </Card>
+
+      {/* The agent's view, directly under the pipeline's own conclusion so the two can be
+          compared rather than confused. */}
+      <AiDiagnosis incidentId={incident.id} />
 
       <div className="grid gap-4 lg:grid-cols-[3fr_2fr]">
         <Card title="Affected cells" action={<span className="text-xs text-ink-muted">{cells.length} cells</span>}>

@@ -17,6 +17,7 @@ import { useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 
 import { Badge, Button, Card, Empty, ErrorNote, Loading, Table } from "@/components/ui";
+import { AskSql } from "@/features/AskSql";
 import { ApiError, getTables, runQuery, type QueryResult } from "@/lib/api";
 
 const EXAMPLES: { label: string; sql: string; note: string }[] = [
@@ -88,6 +89,17 @@ export default function ExplorerPage() {
 
       <div className="grid gap-4 lg:grid-cols-[1fr_18rem]">
         <div className="grid gap-4">
+          {/* Ask first, read the SQL, then run it. The model proposes; the guard executes;
+              a person decides. */}
+          <Card title="Ask a question">
+            <AskSql
+              onUse={(generated) => {
+                setSql(generated);
+                run.reset();
+              }}
+            />
+          </Card>
+
           <Card
             title="Query"
             action={

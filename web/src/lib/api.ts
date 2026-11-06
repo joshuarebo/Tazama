@@ -453,6 +453,82 @@ export type DigestPreview = {
   delivery_note: string;
 };
 
+export type AgentTrace = {
+  agent: string;
+  goal: string;
+  steps: string[];
+  called: string[];
+  refused: string[];
+  tool_calls: {
+    name: string;
+    tier: string;
+    allowed: boolean;
+    proposal: boolean;
+    duration_ms: number;
+    error: string;
+    arguments: Record<string, unknown>;
+  }[];
+  budget: Record<string, number>;
+  stopped_because: string;
+  degraded: boolean;
+  escalated: boolean;
+};
+
+export type AiDiagnosis = {
+  incident_id: string;
+  cause: string | null;
+  confidence: number;
+  confidence_floor: number;
+  needs_human: boolean;
+  method: string;
+  summary: string;
+  evidence: { kind: string; ref: string; note: string; weight?: number }[];
+  runbook_id: string | null;
+  trace: AgentTrace;
+};
+
+export type AiAnswer = {
+  question: string;
+  answer: string;
+  citations: { doc_id: string; chunk?: number }[];
+  sufficient_evidence: boolean;
+  declined: boolean;
+  method: string;
+  trace: AgentTrace;
+};
+
+export type AiSqlSuggestion = {
+  question: string;
+  sql: string | null;
+  explanation: string;
+  tables_used: string[];
+  confidence: number;
+  guard_verdict: "would-be-accepted" | "would-be-refused" | "not-evaluated";
+  guard_reason: string | null;
+  executed: boolean;
+  degraded: boolean;
+  note: string;
+  injection_flags: string[];
+};
+
+export type AiStatus = {
+  configured: boolean;
+  reachable: boolean;
+  degraded: boolean;
+  models: string[];
+  tool_calling: boolean;
+  probe_note: string;
+  accounting: {
+    calls: number;
+    tokens: number;
+    cached: number;
+    degraded: number;
+    by_task: Record<string, number>;
+  };
+  budget_remaining: { calls: number; tokens: number };
+  agents: { name: string; purpose: string; ceiling: string; fallback: string }[];
+};
+
 /* --------------------------------------------------------------- endpoints */
 
 export const getMeta = () => api<Meta>("/api/v1/meta");
@@ -485,6 +561,19 @@ export const getBusiestCells = (limit = 12) =>
   api<BusyCell[]>(`/api/v1/insights/busiest-cells?limit=${limit}`);
 export const getDigest = (kind: "daily" | "weekly") =>
   api<DigestPreview>(`/api/v1/reports/digest?kind=${kind}`);
+export const diagnoseIncident = (incidentId: string) =>
+  api<AiDiagnosis>(`/api/v1/ai/diagnose/${encodeURIComponent(incidentId)}`, {
+    method: "POST",
+    body: JSON.stringify({}),
+  });
+export const askKnowledge = (question: string) =>
+  api<AiAnswer>("/api/v1/ai/ask", { method: "POST", body: JSON.stringify({ question }) });
+export const suggestSql = (question: string) =>
+  api<AiSqlSuggestion>("/api/v1/ai/sql", {
+    method: "POST",
+    body: JSON.stringify({ question }),
+  });
+export const getAiStatus = () => api<AiStatus>("/api/v1/ai/status");
 export const runQuery = (sql: string) =>
   api<QueryResult>("/api/v1/discovery/query", {
     method: "POST",

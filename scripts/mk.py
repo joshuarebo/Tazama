@@ -491,11 +491,22 @@ def demo() -> None:
     catalog()
     web_install()
     say("", "")
-    say("Starting API, worker and web. Press Ctrl+C to stop.", BOLD)
-    say("  API    http://localhost:8000/docs", GREEN)
+    say("Starting the model server, API, worker and web. Press Ctrl+C to stop.", BOLD)
     say("  Web    http://localhost:3000", GREEN)
+    say("  API    http://localhost:8000/docs", GREEN)
+    say("  Model  http://127.0.0.1:8088   (deterministic; nothing leaves this machine)", GREEN)
     procs: list[subprocess.Popen[bytes]] = []
     try:
+        # The model server first, so the AI panels are live rather than degraded on the
+        # first page load. It is deterministic and local: the demo shows the AI paths
+        # without a real endpoint and without any data leaving the machine.
+        procs.append(
+            subprocess.Popen(  # noqa: S603
+                [uv(), "run", "--project", str(BACKEND), "python",
+                 str(ROOT / "scripts" / "fake_llm.py")],
+                cwd=ROOT,
+            ),
+        )
         procs.append(
             subprocess.Popen(  # noqa: S603
                 [

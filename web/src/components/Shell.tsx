@@ -30,6 +30,7 @@ const NAV = [
   { href: "/explorer", label: "Data Explorer", capability: "explorer:query" },
   { href: "/insights", label: "Insights", capability: "insights:read" },
   { href: "/reports", label: "Reports", capability: "report:read" },
+  { href: "/ai", label: "AI quality", capability: "ai:ask" },
 ];
 
 /** The dev-mode accounts, so a reviewer can switch roles and see the RBAC working. */

@@ -136,6 +136,51 @@ class NotificationFill(StrictModel):
         return value
 
 
+class SqlSuggestion(StrictModel):
+    """A *proposed* query. Never a result set, and never executed by the model.
+
+    The division of labour is the whole safety story here: the model writes SQL, a human
+    reads it, and the existing SQL guard is the only thing that ever executes anything. So
+    this schema's job is to make an unusable suggestion fail before it reaches a screen —
+    the guard remains the authoritative check, and the router runs it.
+
+    `tables_used` is required and separate from the SQL on purpose: a model that cannot
+    name the tables it used has not understood its own query, and the mismatch is cheap to
+    spot.
+    """
+
+    sql: Annotated[str, Field(min_length=8, max_length=4_000)]
+    explanation: Annotated[str, Field(min_length=1, max_length=MAX_TEXT)]
+    tables_used: Annotated[list[Annotated[str, Field(max_length=64)]], Field(max_length=12)]
+    confidence: Annotated[float, Field(ge=0.0, le=1.0)] = 0.5
+
+    @field_validator("sql")
+    @classmethod
+    def _must_be_a_single_read(cls, value: str) -> str:
+        """A cheap shape check, well before the guard.
+
+        Not a substitute for the guard — it is a filter that stops the obvious cases from
+        ever being rendered. A suggestion that is a `DELETE`, or that smuggles a second
+        statement after a semicolon, is a prompt-injection symptom rather than a bad
+        query, and it should not reach a human for approval at all.
+        """
+        sql = " ".join(value.split())
+        head = sql.lstrip("( ").upper()
+        if not (head.startswith("SELECT") or head.startswith("WITH")):
+            raise ValueError("a suggested query must be a SELECT (or a WITH ... SELECT)")
+        # One statement. A trailing semicolon is fine; anything after it is not.
+        if ";" in sql.rstrip().rstrip(";"):
+            raise ValueError("only a single statement may be suggested")
+        return sql.rstrip().rstrip(";")
+
+    @field_validator("tables_used")
+    @classmethod
+    def _tables_must_be_named(cls, value: list[str]) -> list[str]:
+        if not value:
+            raise ValueError("name the tables the query reads")
+        return value
+
+
 #: Which schema each named task returns. The gateway reads this, so a task cannot be
 #: called without a schema — "no schema" is not a reachable state.
 TASK_SCHEMAS: dict[str, type[StrictModel]] = {
@@ -144,6 +189,7 @@ TASK_SCHEMAS: dict[str, type[StrictModel]] = {
     "knowledge_answer": KnowledgeAnswer,
     "report_digest": ReportDigest,
     "fill_notification": NotificationFill,
+    "suggest_sql": SqlSuggestion,
 }
 
 

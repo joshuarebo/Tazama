@@ -46,6 +46,15 @@ six capabilities; the others are deliberately narrower and the server enforces i
 6. **Care lookup** — sign in as **Care agent**, click a seeded token, and read the
    approved wording. There is no free-text box: an agent reads an approved line, they do
    not compose one.
+7. **AI diagnosis** — back on an incident card, press **Diagnose**, then expand *"What
+   the agent did"*. Cause, confidence, the evidence rows it rests on, and the trace:
+   tools called, tools **refused**, budget spent. That panel is how "the AI cannot act"
+   becomes something a reviewer checks rather than takes on faith.
+8. **Ask in plain English** — on the Explorer, type *"which regions had the most
+   complaints last week"*. It writes SQL and **does not run it**; you read the query,
+   see the guard's verdict, and press Run yourself.
+9. **AI quality** (`/ai`) — model status, what the AI has cost, each agent's permission
+   ceiling, and what each one falls back to without a model.
 
 ---
 
@@ -60,6 +69,7 @@ six capabilities; the others are deliberately narrower and the server enforces i
 | Phase 4 evals | diagnosis **7/7** labelled scenarios top-1 with no model involved; injection suite 100% blocked; all five degraded modes answer correctly |
 | Phase 5 frontend | lint and `tsc` clean; `npm audit` **0 vulnerabilities**; **25/25 Playwright tests pass** (journeys, axe on all six pages, token contrast in both themes) |
 | Phase 6 reporting | digest built, PII-scanned, size-guarded; schedule timezone-correct; no send path exists |
+| Phase 7 AI surface | the three agents reachable from the console; 22 AI API + 27 text-to-SQL/guard + 16 adapter tests; 28 Playwright journeys |
 
 ---
 
@@ -80,7 +90,13 @@ refusal. A digest containing a number that was not in its inputs is thrown away 
 
 **Nothing the AI produces can act.** There is no adapter, credential or code path from
 TAZAMA to a network element. `execute_runbook` is registered only so that an agent asking
-for it is recorded.
+for it is recorded — and the incident card's trace panel shows that refusal, so the claim
+is checkable in ten seconds rather than taken on trust.
+
+**Natural-language querying proposes; it never executes.** The model writes SQL, the guard
+gives a verdict without running it, and a human presses Run. A test proves the chain holds
+against a *fully compromised* model returning `DROP TABLE complaint`: nothing happens
+(ADR 0010).
 
 ---
 

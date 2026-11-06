@@ -52,6 +52,9 @@ PERMISSIONS: Final[dict[str, frozenset[str]]] = {
     "report:read": frozenset({MANAGER, ANALYST, NOC_ENGINEER, ADMIN}),
     "report:send": frozenset({ADMIN}),
     "ai:ask": frozenset({NOC_ENGINEER, ANALYST, CARE_AGENT, MANAGER, ADMIN}),
+    # Running a diagnosis is a read, but it spends model budget and writes a decision
+    # record, so it is narrower than asking a documentation question.
+    "ai:diagnose": frozenset({NOC_ENGINEER, ANALYST, ADMIN}),
     "ai:quality": frozenset({ANALYST, MANAGER, ADMIN}),
     "audit:read": frozenset({ADMIN, MANAGER}),
     "admin:manage": frozenset({ADMIN}),

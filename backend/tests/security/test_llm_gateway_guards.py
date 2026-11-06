@@ -421,3 +421,43 @@ def test_an_injection_attempt_is_recorded_on_the_result(settings) -> None:
     # Flagged, but still processed: refusing every complaint containing the word "ignore"
     # would make the product unusable, and the real defence is structural.
     assert result.parsed is not None
+
+
+def test_a_cache_hit_returns_the_same_answer_marked_as_cached(settings) -> None:
+    """The regression. `LlmResult` is a frozen dataclass with `slots=True`, so it has no
+    `__dict__`; building a cached copy from one raised `AttributeError` on every cache hit.
+
+    It hid for a whole phase because the tests disable the cache and, before the gateway
+    emitted a task marker, every call degraded — and a degraded result is never cached. The
+    first repeated *successful* call found it instantly. So the cache is switched on here
+    deliberately, and the same prompt is sent twice.
+    """
+    calls = {"n": 0}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("/models"):
+            return httpx.Response(200, json={"data": []})
+        calls["n"] += 1
+        return httpx.Response(200, json=_envelope(VALID_CLASSIFICATION))
+
+    cached = settings.model_copy(
+        update={"LLM_BASE_URL": "http://fake.invalid", "LLM_CACHE_TTL_S": 900},
+    )
+    gateway = LlmGateway(
+        cached,
+        client=httpx.Client(
+            base_url="http://fake.invalid",
+            transport=httpx.MockTransport(handler),
+        ),
+    )
+
+    first = gateway.complete(task="classify_complaint", system="c", user="u", untrusted="x")
+    second = gateway.complete(task="classify_complaint", system="c", user="u", untrusted="x")
+
+    assert first.cached is False
+    assert second.cached is True, "the second identical call should come from the cache"
+    assert calls["n"] == 1, "a cache hit must not reach the transport"
+    # And the answer survives the round trip intact.
+    assert second.parsed is not None
+    assert second.parsed == first.parsed
+    assert second.task == first.task

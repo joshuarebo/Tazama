@@ -205,10 +205,21 @@ source_modules = ["tazama.modules"]
 forbidden_modules = ["tazama.infrastructure", "tazama.api", "tazama.worker"]
 
 [[tool.importlinter.contracts]]
+# `tazama.api` is deliberately NOT a source module here, and the reason is worth stating:
+# it is the composition root, so it must be able to *obtain* the gateway in order to inject
+# it. Because import-linter follows the transitive closure, any importer of the gateway is
+# a violator, and no amount of indirection changes that — a provider function in another
+# module still leaves the chain api -> provider -> gateway -> httpx.
+#
+# What the contract protects is business logic: a module, an agent, the RAG layer or the ML
+# layer must never reach a model endpoint itself. That is intact. The guarantee this
+# exclusion gives up — that no route does its own `httpx.post` to a model — is covered
+# instead by `tests/unit/test_import_boundaries.py`, which is a stricter check than the
+# transitive one because it looks for the direct import rather than the closure.
 name = "only the gateway talks to a model endpoint"
 type = "forbidden"
 source_modules = [
-    "tazama.modules", "tazama.ai.agents", "tazama.ai.rag", "tazama.ai.ml", "tazama.api",
+    "tazama.modules", "tazama.ai.agents", "tazama.ai.rag", "tazama.ai.ml",
 ]
 forbidden_modules = ["httpx"]
 

@@ -45,6 +45,9 @@ CANARY = "TAZAMA-CANARY"
 BEHAVIOUR_RE = re.compile(r"::fake:([a-z0-9\-]+)")
 TASK_RE = re.compile(r"TASK:\s*([a-z_]+)", re.IGNORECASE)
 
+#: Document ids the caller supplied, so a cited source is one that was given.
+DOC_ID_RE = re.compile(r"doc_id=([A-Za-z0-9_.:-]+)")
+
 
 class Message(BaseModel):
     role: Literal["system", "user", "assistant", "tool"]
@@ -160,10 +163,28 @@ def _task_response(task: str, prompt: str) -> str:
             },
         )
     if task == "knowledge_answer":
+        # Cite a document that was actually supplied, by reading the doc_ids out of the
+        # prompt. A hardcoded citation made this fake model *always* fabricate: the
+        # assistant's grounding check correctly rejected every answer, so the knowledge
+        # path could never succeed and the rejection looked like the only behaviour.
+        # A fake should model a competent model by default — adversarial behaviour is what
+        # the `::fake:` switches are for.
+        supplied = DOC_ID_RE.findall(prompt)
+        if not supplied:
+            return json.dumps(
+                {
+                    "answer": "",
+                    "citations": [],
+                    "sufficient_evidence": False,
+                },
+            )
         return json.dumps(
             {
-                "answer": "Follow the transmission-failure runbook: verify the link, then escalate.",
-                "citations": [{"doc_id": "KB-TRANSMISSION", "chunk": 1}],
+                "answer": (
+                    "Per the supplied documentation: follow the procedure in the cited "
+                    "section, and escalate if it does not resolve within the stated window."
+                ),
+                "citations": [{"doc_id": doc_id, "chunk": 1} for doc_id in supplied[:2]],
                 "sufficient_evidence": True,
             },
         )
@@ -176,6 +197,30 @@ def _task_response(task: str, prompt: str) -> str:
                     "MTTR 92 minutes",
                 ],
                 "numbers_used": [3, 92],
+            },
+        )
+    if task == "suggest_sql":
+        # Deterministic and *correct against the real schema*, so the offline demo and the
+        # evals exercise the whole chain — schema filter, SQL guard, execution — rather
+        # than stopping at a plausible-looking string. Anchored on the data rather than on
+        # `now`, because the seeded database sits still.
+        return json.dumps(
+            {
+                "sql": (
+                    "SELECT region, COUNT(*) AS complaints "
+                    "FROM complaint "
+                    "WHERE received_at >= ("
+                    "SELECT DATETIME(MAX(received_at), '-7 days') FROM complaint"
+                    ") "
+                    "GROUP BY region "
+                    "ORDER BY complaints DESC"
+                ),
+                "explanation": (
+                    "Counts complaints per region over the last seven days of available "
+                    "data, highest first."
+                ),
+                "tables_used": ["complaint"],
+                "confidence": round(0.6 + (rng % 30) / 100, 2),
             },
         )
     if task == "fill_notification":

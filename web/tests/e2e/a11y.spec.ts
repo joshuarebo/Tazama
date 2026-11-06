@@ -18,6 +18,7 @@ const PAGES = [
   { path: "/explorer", name: "Data Explorer", role: "Admin" },
   { path: "/insights", name: "Insights", role: "Admin" },
   { path: "/reports", name: "Reports", role: "Admin" },
+  { path: "/ai", name: "AI quality", role: "Admin" },
 ];
 
 for (const target of PAGES) {
@@ -25,6 +26,13 @@ for (const target of PAGES) {
     await signIn(page, target.role);
     await page.goto(target.path);
     await expect(page.getByRole("main")).toBeVisible();
+
+    // Wait for the page to *settle* before analysing it. `main` appears long before the
+    // data does, and axe on a half-loaded page is both a false negative (the real markup
+    // is not there yet) and flaky — the Reports digest is slow enough to have failed this
+    // way once. Every panel renders a `Loading …` status while it waits, so their absence
+    // is the signal.
+    await expect(page.getByText(/^Loading /).first()).toBeHidden({ timeout: 45_000 });
 
     const results = await new AxeBuilder({ page })
       .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"])

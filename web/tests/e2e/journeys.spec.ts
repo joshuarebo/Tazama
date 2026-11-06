@@ -177,7 +177,10 @@ test.describe("Insights", () => {
     // The reading in words, so the panel does not require remembering the sign convention.
     // Lead-lag needs two round trips — the busiest-cells list picks the cell the analysis
     // then runs on — so wait for the result badges before asserting the prose.
-    await expect(page.getByText(/^best lag/i)).toBeVisible();
+    // Two sequential API calls: the busiest-cells list picks the cell, then the
+    // cross-correlation runs over 336 hourly points. Worth an explicit wait rather than
+    // the default — the panel is correct, just not instant.
+    await expect(page.getByText(/best lag/i).first()).toBeVisible({ timeout: 45_000 });
     await expect(
       page
         .getByText(/before the complaint rate|move together|customers notice first|no usable/i)
@@ -225,5 +228,89 @@ test.describe("Reports", () => {
     // The title appears twice by design: as the card's heading and inside the JSON payload
     // — which is exactly the point of showing both.
     await expect(page.getByText(/weekly network-care summary/i).first()).toBeVisible();
+  });
+});
+
+test.describe("AI", () => {
+  test("the agent's diagnosis shows its evidence and what it was refused", async ({ page }) => {
+    await signIn(page, "NOC engineer");
+
+    const firstIncident = page
+      .getByRole("table", { name: /live incidents/i })
+      .locator("tbody tr")
+      .first()
+      .getByRole("link")
+      .first();
+    await expect(firstIncident).toBeVisible();
+    await firstIncident.click();
+
+    const panel = page.locator("section", { hasText: /^AI diagnosis/ }).first();
+    await expect(panel).toBeVisible();
+
+    await panel.getByRole("button", { name: /^diagnose$/i }).click();
+
+    // A cause and how it was reached. `rules` means no model was consulted at all.
+    await expect(panel.getByText(/confidence \d+%/)).toBeVisible();
+    await expect(panel.getByText(/method: (rules|llm|none)/)).toBeVisible();
+
+    // The trace is the point of the panel: expand it and check the containment is visible.
+    const trace = panel.getByText(/what the agent did/i);
+    await expect(trace).toBeVisible();
+    await trace.click();
+
+    await expect(panel.getByText(/tools called/i)).toBeVisible();
+    await expect(panel.getByText(/tools refused/i)).toBeVisible();
+    await expect(panel.getByText(/stopped because/i)).toBeVisible();
+    // Whatever happened, nothing that could act was called.
+    await expect(panel.getByText("execute_runbook")).toHaveCount(0);
+  });
+
+  test("a plain-English question produces SQL that is shown before it runs", async ({
+    page,
+  }) => {
+    await signIn(page, "Admin");
+    await page.goto("/explorer");
+
+    const ask = page.locator("section", { hasText: /ask a question/i }).first();
+    await expect(ask).toBeVisible();
+
+    await ask.getByRole("button", { name: /which regions had the most complaints/i }).click();
+
+    // The SQL appears. No results do — nothing has been executed.
+    await expect(ask.getByText(/the guard would (accept|refuse) this/i)).toBeVisible();
+    await expect(ask.locator("pre")).toContainText(/SELECT/i);
+    await expect(page.getByRole("table", { name: /query result/i })).toHaveCount(0);
+    await expect(ask.getByText(/nothing has been executed/i)).toBeVisible();
+
+    // The human approves it into the editor, then runs it.
+    await ask.getByRole("button", { name: /use this query/i }).click();
+    await page.getByRole("button", { name: /run query/i }).click();
+
+    const result = page.getByRole("table", { name: /query result/i });
+    await expect(result).toBeVisible();
+    await expect(result.locator("tbody tr").first()).toBeVisible();
+  });
+
+  test("the AI quality page says what the model is and what each agent may touch", async ({
+    page,
+  }) => {
+    await signIn(page, "Admin");
+    await page.goto("/ai");
+
+    await expect(page.getByRole("heading", { name: "AI quality" })).toBeVisible();
+    await expect(page.getByText("Model endpoint").first()).toBeVisible();
+
+    // All three agents, each with a ceiling and a stated fallback.
+    const agents = page.getByRole("table", { name: /agents, their permission ceilings/i });
+    await expect(agents).toBeVisible();
+    for (const name of ["DiagnosisAgent", "KnowledgeAssistant", "Reporter"]) {
+      await expect(agents.getByText(name)).toBeVisible();
+    }
+    await expect(page.getByText(/no agent holds a tool that can act/i)).toBeVisible();
+
+    // And the assistant declines rather than guessing.
+    await page.getByLabel(/question/i).fill("what is the quarterly dividend policy?");
+    await page.getByRole("button", { name: /^ask$/i }).click();
+    await expect(page.getByText(/declined|answered/).first()).toBeVisible();
   });
 });

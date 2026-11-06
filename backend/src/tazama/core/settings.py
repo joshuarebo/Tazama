@@ -349,7 +349,23 @@ def get_settings() -> Settings:
     """
     # `TAZAMA_ENV_FILE=""` means "environment variables only" — what CI and the test
     # suite use so a developer's .env can never change a test result.
-    env_file = os.environ.get("TAZAMA_ENV_FILE", ".env") or None
+    #
+    # The default is anchored to the repo root, not to the working directory. A bare
+    # ".env" is resolved against cwd, so the API (which runs from `backend/`) silently
+    # found no env file at all and every setting fell back to its default — including
+    # `LLM_BASE_URL`, which made the whole AI surface report "not configured" while the
+    # file sat there correctly filled in. Same class of bug as the `config/` and
+    # `SQLITE_PATH` paths, and the same fix.
+    # Imported here rather than at module scope: `core.paths` is a sibling and this module
+    # is imported very early, so the local import keeps the dependency one-directional.
+    from tazama.core.paths import repo_root
+
+    override = os.environ.get("TAZAMA_ENV_FILE")
+    if override is not None:
+        env_file: str | None = override or None
+    else:
+        default = repo_root() / ".env"
+        env_file = str(default) if default.exists() else None
     try:
         return Settings(_env_file=env_file)  # type: ignore[call-arg]
     except ValidationError as exc:

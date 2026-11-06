@@ -5,6 +5,7 @@ from __future__ import annotations
 from fastapi import APIRouter
 
 from tazama.api.v1.routers import (
+    ai,
     audit,
     auth,
     care,
@@ -33,6 +34,7 @@ router.include_router(notifications.router, prefix="/api/v1")
 router.include_router(recovery.router, prefix="/api/v1")
 router.include_router(audit.router, prefix="/api/v1")
 router.include_router(insights.router, prefix="/api/v1")
+router.include_router(ai.router, prefix="/api/v1")
 router.include_router(reports.router, prefix="/api/v1")
 
 __all__ = ["router"]

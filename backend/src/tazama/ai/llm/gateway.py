@@ -32,7 +32,7 @@ import json
 import random
 import re
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from hashlib import sha256
 from typing import Any
 
@@ -352,7 +352,7 @@ class LlmGateway:
             )
 
         system_prompt = self._system_prompt(system)
-        user_prompt = self._user_prompt(user, redaction.text, schema)
+        user_prompt = self._user_prompt(task, user, redaction.text, schema)
 
         if not self.configured:
             return self._degraded(
@@ -514,7 +514,13 @@ class LlmGateway:
             f"{_JSON_RULE}\n\n{body.strip()}"
         )
 
-    def _user_prompt(self, body: str, untrusted: str, schema: type[StrictModel]) -> str:
+    def _user_prompt(
+        self,
+        task: str,
+        body: str,
+        untrusted: str,
+        schema: type[StrictModel],
+    ) -> str:
         """Assemble the prompt so the untrusted block cannot escape or crowd out the rules.
 
         Two separate problems, both solved by building the trusted parts first:
@@ -530,6 +536,13 @@ class LlmGateway:
           into the room that is left instead.
         """
         trusted = [
+            # The task is named first, which matters twice over: a real model
+            # answers a named task more consistently than an unnamed one, and the
+            # deterministic fake server routes on exactly this marker. Without it
+            # the fake fell through to a generic answer, every schema validation
+            # failed, and every AI path silently took its deterministic fallback —
+            # the integration looked fine because the fallbacks are good.
+            f"TASK: {task}",
             body.strip(),
             "Return JSON matching this schema:\n"
             + json.dumps(schema.model_json_schema(), separators=(",", ":")),
@@ -555,7 +568,9 @@ class LlmGateway:
         if len(safe) > room:
             safe = safe[:room] + "\n[...truncated]"
 
-        return "\n\n".join([trusted[0], wrapper.format(safe), trusted[1]])
+        # The untrusted block sits between the instructions and the schema, so the
+        # schema stays last whatever the task prefix added.
+        return "\n\n".join([*trusted[:-1], wrapper.format(safe), trusted[-1]])
 
     def _post(
         self,
@@ -723,7 +738,12 @@ class LlmGateway:
         if entry.expires_at <= time.monotonic():
             del self._cache[key]
             return None
-        hit = LlmResult(**{**entry.result.__dict__, "cached": True})
+        # `replace`, not `__dict__`: `LlmResult` is a frozen dataclass with `slots=True`,
+        # so it has no `__dict__` at all and the old form raised `AttributeError` on every
+        # cache *hit*. It stayed hidden because the tests set `LLM_CACHE_TTL_S=0` and,
+        # before the task marker was added, every call degraded — and a degraded result is
+        # never cached. The first successful repeat call found it immediately.
+        hit = replace(entry.result, cached=True)
         self._record(hit)
         return hit
 
