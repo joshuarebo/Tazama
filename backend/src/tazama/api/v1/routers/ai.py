@@ -133,6 +133,7 @@ class StatusOut(BaseModel):
     degraded: bool
     models: list[str]
     tool_calling: bool
+    #: A fixed label, never the probe's exception text — see `_probe_label`.
     probe_note: str
     accounting: dict[str, Any]
     budget_remaining: dict[str, int]
@@ -299,6 +300,34 @@ async def suggest_sql(
     )
 
 
+#: The capability probe's note carries an exception string, and an httpx error embeds the
+#: full request URL — which in a real deployment is `LLM_BASE_URL` and may carry credentials
+#: in its userinfo. `/ai/status` is readable by every role that can use the AI at all, so
+#: the note is reduced to one of these fixed labels before it leaves the process. The full
+#: text stays on the server, where an operator debugging the endpoint can read it.
+_PROBE_LABELS: tuple[tuple[tuple[str, ...], str], ...] = (
+    (("connect", "connection", "refused", "name or service"), "unreachable: cannot connect"),
+    (("timeout", "timed out"), "unreachable: timed out"),
+    (("401", "403", "unauthorized", "forbidden"), "refused: not authorised"),
+    (("404",), "refused: endpoint not found"),
+    (("certificate", "ssl", "tls"), "unreachable: TLS error"),
+)
+
+
+def _probe_label(note: str, *, reachable: bool) -> str:
+    """Map a probe note onto a fixed label, never echoing the exception text."""
+    if reachable:
+        # The gateway's own wording on success is descriptive, not diagnostic.
+        return note if note in {"", "ok"} else "ok"
+    if not note:
+        return "not probed"
+    lowered = note.lower()
+    for needles, label in _PROBE_LABELS:
+        if any(needle in lowered for needle in needles):
+            return label
+    return "unreachable"
+
+
 @router.get(
     "/status",
     response_model=StatusOut,
@@ -314,13 +343,17 @@ async def status() -> StatusOut:
     """
     gateway: LlmGateway = get_gateway()
     capabilities = gateway.capabilities()
+    if not capabilities.reachable and capabilities.note:
+        # Server-side only: this is the one place the detail is useful, and the one place
+        # it is safe. `extra` goes to the structured log, not to the response.
+        _log.warning("llm_probe_failed", extra={"detail": capabilities.note})
     return StatusOut(
         configured=gateway.configured,
         reachable=capabilities.reachable,
         degraded=not (gateway.configured and capabilities.reachable),
         models=list(capabilities.models),
         tool_calling=capabilities.tool_calling,
-        probe_note=capabilities.note,
+        probe_note=_probe_label(capabilities.note, reachable=capabilities.reachable),
         accounting=gateway.accounting,
         budget_remaining=gateway.budget_remaining,
         agents=[

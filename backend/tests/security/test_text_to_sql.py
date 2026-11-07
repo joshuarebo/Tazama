@@ -24,6 +24,7 @@ from fastapi.testclient import TestClient
 from pydantic import ValidationError
 
 from tazama.ai.llm.schemas import SqlSuggestion
+from tazama.api.v1.routers.ai import _probe_label
 from tazama.modules.discovery import sql_guard
 
 pytestmark = pytest.mark.security
@@ -272,3 +273,58 @@ def test_suggesting_requires_the_same_capability_as_running(client, auth_headers
         )
         assert suggest.status_code == 403
         assert run.status_code == 403, f"{role} must not be able to run one either"
+
+
+# --------------------------------------------------- the status panel leaks nothing
+
+
+@pytest.mark.parametrize(
+    ("note", "expected"),
+    [
+        # The realistic case: httpx puts the whole request URL in the message, and in a
+        # real deployment that URL is LLM_BASE_URL — which may carry credentials.
+        (
+            "probe failed: ConnectError: [Errno 111] Connection refused "
+            "while requesting http://svc:s3cr3t@models.internal:8088/v1/models",
+            "unreachable: cannot connect",
+        ),
+        (
+            "probe failed: ReadTimeout while requesting https://models.internal/v1/models",
+            "unreachable: timed out",
+        ),
+        (
+            "probe failed: HTTP 401 Unauthorized from https://models.internal/v1/models",
+            "refused: not authorised",
+        ),
+        (
+            "probe failed: HTTP 404 from https://models.internal/v1/models",
+            "refused: endpoint not found",
+        ),
+        (
+            "probe failed: SSLCertVerificationError for https://models.internal/v1/models",
+            "unreachable: TLS error",
+        ),
+        # Anything unrecognised still must not pass through verbatim.
+        ("probe failed: something nobody anticipated at 10.0.0.4", "unreachable"),
+        ("", "not probed"),
+    ],
+)
+def test_the_probe_note_never_reaches_a_client(note: str, expected: str) -> None:
+    """`/ai/status` is readable by every role that may use the AI at all.
+
+    The probe note is an exception string, so it is reduced to a fixed label. The assertion
+    that matters is not the label itself but the absence of the host, the port, the scheme
+    and above all the credential.
+    """
+    label = _probe_label(note, reachable=False)
+    assert label == expected
+    for leak in ("s3cr3t", "models.internal", "10.0.0.4", "8088", "http", "Errno"):
+        assert leak not in label
+
+
+def test_a_reachable_probe_is_reported_plainly() -> None:
+    assert _probe_label("", reachable=True) == ""
+    assert _probe_label("ok", reachable=True) == "ok"
+    # Even on success the note is not passed through: it is the gateway's wording, and a
+    # future change to it should not become an output channel.
+    assert _probe_label("connected to http://svc:pw@host/v1", reachable=True) == "ok"
