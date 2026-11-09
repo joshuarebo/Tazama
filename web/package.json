@@ -4,8 +4,8 @@
   "private": true,
   "description": "TAZAMA operator console. Synthetic data only; brand values are placeholders.",
   "scripts": {
-    "dev": "next dev -p 3000",
-    "build": "next build",
+    "dev": "next dev -p 3000 --webpack",
+    "build": "next build --webpack",
     "start": "next start -p 3000",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
@@ -37,3 +37,4 @@
     "vitest": "^4.1.12"
   }
 }
+

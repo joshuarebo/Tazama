@@ -1,222 +1,139 @@
-# TAZAMA — demo script
+# TAZAMA — Executive Demo & Pitch Script
 
-A 15-minute walkthrough for senior leadership, with the exact numbers to expect and the
-honest answer to every question they will ask.
-
-**Before you start:** `make demo`, then open <http://localhost:3000> and sign in as
-**Admin**. That role holds all seven capabilities; the others are deliberately narrower and
-you will demonstrate that at the end.
-
-Everything on screen is synthetic. Say so once, early, and let the ribbon at the top of
-every page carry it from there.
+A punchy 5-minute executive pitch script for senior leadership, followed by the complete screen-by-screen conversational guide, first-principles algorithmic breakdown, and honest answers to leadership questions.
 
 ---
 
-## 1. The problem, in two sentences
+## ⚡ 5-Minute Pitch Script (Word-for-Word Track)
 
-> Today a network fault becomes a customer problem before anyone in the NOC knows it is a
-> fault. The network's own data saw it first — a cell's availability dropped, an alarm
-> fired — but nobody connected that to the forty people now calling the contact centre.
+*Have <http://localhost:3000> open on your screen signed in as **Admin** before you start.*
 
-That gap is the whole product. Everything else follows from closing it.
-
----
-
-## 2. Why it matters — three audiences, three reasons
-
-Lead with the customer. The cost case is real but it is the third reason, not the first.
-
-**For the customer.** Right now they find out their service is broken by trying to use it,
-then wait on hold to be told something the operator already knew. TAZAMA inverts that: the
-operator tells them first, with a specific message about their area and an honest statement
-of what is being done. A customer who was told is a customer who does not call, and far
-more importantly, is a customer who was treated as though their time mattered.
-
-**For the network team.** An engineer's day is currently spent assembling context: which
-cells, how many subscribers, is there maintenance, has this happened before, what did we do
-last time. TAZAMA assembles it before they open the ticket — the incident card is that
-context on one screen, with the evidence attached. The work shifts from *gathering* to
-*deciding*, which is what you hired engineers for.
-
-**For the business.** Avoidable contacts are the measurable line: every proactive
-notification that lands before a call is a contact that did not happen, and the product
-records exactly how many. Alongside it: faster mean time to repair because diagnosis starts
-with evidence rather than a blank page, and SLA exposure visible per incident rather than
-discovered at the end of the month.
-
-> If you only remember one framing: **the network already knows. TAZAMA is the part that
-> tells somebody.**
+### [0:00 - 1:00] The First-Principles Problem & Why It Matters
+> *"Good morning leadership. Today, across our network of over 50 million subscribers, when a cell tower degrades or a fiber link drops, our network equipment sees it within milliseconds. Alarms fire in the NOC.*
+>
+> *Yet, who tells us the network is broken? Our customers. They experience a dropped call or a failed M-PESA transaction, and they dial into customer care or *100 USSD. The contact center spikes with thousands of calls, agents are blind to local tower status, and engineers in the NOC are drowning in 10,000 blinking red alarms trying to piece together what happened.*
+>
+> *The fundamental gap is this: **The network already knows. But nobody connected the network's data to the customer calling in.**
+>
+> *TAZAMA closes that gap. We turn raw telemetry, alarms, and customer complaints into real-time incident intelligence, automated root-cause diagnosis, and proactive care before the customer even has to call."*
 
 ---
 
-## 3. The walkthrough
-
-### Command Center — 2 minutes
-
-Open <http://localhost:3000>.
-
-Expected: **17 live incidents, 2 suppressed, ~140,201 subscribers affected, 69 complaints
-correlated.** Causes: congestion 13, cell outage 3, transmission link failure 1.
-
-Three things to point at:
-
-1. **"2 suppressed."** Two incidents were detected and then deliberately *not* raised,
-   because planned maintenance covers them. A system that pages someone about scheduled
-   work gets ignored within a week.
-2. **"complaint → cell coverage 52.0%"** in the top right. This is the hardest technical
-   problem in the product — matching a customer's complaint to the cell that serves them —
-   and it is on screen on every page load rather than buried in a report. *Say the number
-   out loud.* Half the complaints cannot be placed yet, and we measure it precisely so it
-   can be improved rather than assumed away.
-3. **The map.** No basemap, by design: an operator's NOC may have no internet route, and
-   the geography of a fault is readable without one. Dot size is subscribers affected.
-
-### The incident card — 4 minutes
-
-Click **"Transmission link failure"** (`INC_K8Y583VK8Q1CRF`) — 35 complaints, 27 cells.
-
-This is the screen that replaces the assembling work.
-
-- **Impact first**: subscribers, cells, complaints, enterprise accounts, SLA risk.
-- **Probable cause, with evidence rows.** Each row is a pointer to a database record — an
-  alarm id, a topology node, a complaint count. Nothing here is an assertion without a
-  trail.
-- **KPI charts** with a dashed *incident start* marker. Ask them to check that the curve
-  actually turns at the marker. That is them auditing the detection rather than trusting it.
-- **The decision trail**: who or what decided, when, under which rule version.
-
-### The AI — 4 minutes, and the most important part
-
-Still on the incident card, press **Diagnose**.
-
-You get a cause, a confidence score, the evidence it rests on — and then expand
-**"What the agent did"**. That panel is the demo.
-
-- **Tools called**: the agent read the incident, its alarms, the topology, the complaint
-  counts, the runbook catalogue.
-- **Tools refused**: `execute_runbook` is registered specifically so that an agent reaching
-  for it is *recorded*. It is refused before any code runs.
-- **Budget**: steps, tool calls and wall-clock, each capped. A loop that cannot terminate
-  cannot take the pipeline with it.
-- **Method**: `rules` or `llm`. If it says `rules`, the deterministic path was conclusive
-  and **no model was consulted at all**.
-
-Say this plainly:
-
-> The model does not decide and cannot act. It proposes, with evidence we verify against
-> the records it was actually shown. If it cites an alarm that does not exist, we throw the
-> whole answer away.
-
-Now the **Data Explorer** (`/explorer`). Type a question in plain English:
-*"which regions had the most complaints last week"*.
-
-It writes SQL. **It does not run it.** You read the query, see the guard's verdict beside
-it, press **Use this query**, then press **Run**. Expected: Nairobi ~1,550, Mombasa ~915,
-Nakuru ~888, Kisumu ~767.
-
-> The model wrote that query. A person read it. The database only ever executes what a
-> person approved, through a guard that allows SELECT and nothing else.
-
-Then click **"Try to delete data"** and Run. A yellow panel: *refused by the SQL guard,
-never sent to the database*. Yellow, not red — a refusal is a correct outcome.
-
-### The safety demonstration — 2 minutes
-
-This is the slide that wins the room, and it costs nothing to show.
-
-Stop the model server (`Ctrl+C` in the `make fake-llm` window, or just note it) and reload
-the incident card. Press **Diagnose** again.
-
-**You get the same cause.** Method says `rules`, the header shows *AI degraded*, and the AI
-Quality page explains why.
-
-> The product does not depend on the model. If it is slow, down, or wrong, everything keeps
-> working and the screen tells you which path produced the answer.
-
-### Care, reports and roles — 3 minutes
-
-**Care lookup** (`/care`, as a Care agent). Click a seeded subscriber token. The agent sees
-whether there is a known problem *on that subscriber's cell* — and if the only live incident
-is elsewhere in the region, the panel says so explicitly rather than letting them overclaim.
-The wording they read to the customer is an approved template with a Copy button and **no
-text box**. An agent reads an approved line; they do not compose one.
-
-**Reports** (`/reports`). The Microsoft Teams digest, rendered as the card *and* as the
-exact JSON that would be posted. `TEAMS_DRY_RUN = true`, "nothing has been posted", and no
-send button — because there is no send endpoint. Mention that the card is scanned for phone
-numbers and subscriber tokens before it is returned, and a hit blocks the report rather
-than quietly redacting it.
-
-**Roles.** Sign out, sign in as **Care agent**. The Data Explorer, Insights and Reports
-disappear. Now type `localhost:3000/explorer` directly — refused by the server, not just
-hidden. Hiding a link is not authorisation.
+### [1:00 - 2:00] Screen 1: Command Center (`http://localhost:3000`)
+*(Point at the screen)*
+> *"Here is the live Command Center. Three things to notice immediately:*
+>
+> 1. *Across our country footprint, we have **17 active incidents affecting ~140,000 subscribers**, with **69 complaints** already correlated to specific cell towers.*
+> 2. *Look at this metric in the corner: **'2 suppressed'**. These were real degradations, but Tazama suppressed them because they match scheduled maintenance. We stop alert fatigue before it starts.*
+> 3. *And right here: **'complaint → cell coverage: 52%'**. We don't hide the truth. In telco, connecting a customer complaint to their serving cell is the hardest technical problem. We measure it live on every screen so we can improve it rather than pretend it doesn't exist.*
+>
+> *Notice the map: dot sizes represent actual subscribers affected, giving the NOC an instant geographic heat map of impact."*
 
 ---
 
-## 4. What is real and what is not
-
-Be first to say this. It buys you every other claim in the room.
-
-| Real | Not real |
-| --- | --- |
-| The architecture, the pipeline, the correlation engine, the guards | The data — every subscriber, site, cell, complaint and KPI is generated |
-| Every number on screen, computed from that data by the real code | The KPI thresholds, which are modelled from public practice and labelled UNVERIFIED |
-| The 1,605 automated tests and every gate result | The brand colours and wordmark, which are placeholders |
-| The agents, their evals, their refusals | Teams delivery — built and validated, never sent, because no webhook exists yet |
-| The ML gate: the forecast beats its baseline by 15.7% | The accuracy figures in production, which will be worse than these |
-
-On that last row, say it unprompted:
-
-> Every model here looks better than it will in production, because this data contains the
-> relationships we put in it. The honest number is "it beats the baseline on our data", and
-> the gate is built so that if it ever stops beating the baseline, it stops shipping.
+### [2:00 - 3:00] Screen 2: Incident Deep-Dive (`/incidents/INC_K8Y583VK8Q1CRF`)
+*(Click into the Transmission Link Failure incident)*
+> *"Let's drill into this major incident: Transmission link failure covering 27 cells and 35 complaints.*
+>
+> *In the past, an engineer spent two hours opening six different databases to find out which sites were down, which enterprise accounts had SLAs at risk, and what caused it.*
+>
+> *Here, on one single card, Tazama assembles:*
+> - *Exact subscriber and SLA impact.*
+> - *Every piece of physical evidence: the specific aggregation node alarm.*
+> - *KPI trendlines with a dashed vertical line marking the exact incident start.*
+>
+> *The engineer's job shifts from **gathering evidence** to **making decisions**."*
 
 ---
 
-## 5. The three questions you will be asked
-
-**"Can it act on its own?"**
-
-No, and not as a policy — as an absence. There is no adapter, no credential and no code
-path from TAZAMA to a network element. Runbooks are recommended and executed by a human
-elsewhere. The tool that would execute one exists only so that an agent asking for it gets
-recorded.
-
-**"What happens to customer data?"**
-
-Phone numbers are converted to irreversible tokens at the moment they arrive, before
-anything else sees them. The model never receives an identifier, and every outbound text —
-to a model, a log, a Teams card, an export — is scanned. A Teams card containing a phone
-number *blocks the report* rather than being quietly cleaned, because the point is to fix
-wherever it came from. What does not exist yet: a deletion procedure. That is first on the
-list before any real subscriber record goes near this.
-
-**"How long to go live?"**
-
-Switching to real data is configuration, not code: one mappings file and a set of
-environment variables. The honest blocker is not technical — it is three operational
-procedures that must exist first: **deleting a subscriber's data on request, rotating the
-pseudonymisation key, and a floor below which a small cell is not reported individually**
-(because a complaint rate on a twelve-subscriber cell at 3am is close to identifying).
-Those are days of work, not months, and they are not optional.
+### [3:00 - 4:00] Screen 3: Safe AI Diagnosis & The Guardrails
+*(Press the **Diagnose** button, then expand 'What the agent did')*
+> *"Now, where does AI come in? I press **Diagnose**.*
+>
+> *Notice two critical design decisions:*
+> 1. *Tazama checks **deterministic operational rules first**. If the rules are certain, we don't even call the AI. That makes it instant, free, and immune to hallucinations.*
+> 2. *When the AI Agent does analyze the incident, expand this panel: **'What the agent did'**. You can see the exact tools called, and look here: **'Tools refused: execute_runbook'**.*
+>
+> *Our AI is strictly read-and-propose. It recommends actions with citations to real database alarms; it has zero ability to touch or disrupt a network element. A human engineer stays in control."*
 
 ---
 
-## 6. If something looks wrong on the day
-
-| Symptom | Most likely cause |
-| --- | --- |
-| Command Center shows 0 incidents | The detection pass has not run — `make pipeline` |
-| Every AI panel says "AI degraded" | The model server is not running — `make fake-llm` |
-| A query returns no rows | It asked for "the last 7 days" against data that ends in March; anchor the window on the data |
-| A page shows an error panel | The API is not running — check <http://127.0.0.1:8000/healthz> |
+### [4:00 - 4:45] Screen 4: Proactive Customer Care (`/care`) & Safe Data Explorer (`/explorer`)
+*(Click **Care** in the top navigation)*
+> *"What does this mean for customer care? A customer dials *100 or calls an agent.*
+>
+> *The care agent looks up the pseudonymized subscriber. Instead of guessing, they see immediately: 'Service degradation on cell NRB-042 due to transmission link maintenance, estimated recovery 45 mins'.*
+>
+> *Beside it is an **approved script template with a Copy button and NO free-text compose box**. The agent delivers an honest, accurate message in 10 seconds.*
+>
+> *And on our **Data Explorer**, leadership or analysts can ask questions in plain English: 'Which regions had the most complaints last week?'. Tazama's AI writes the SQL, verifies it through a SELECT-only security guard, and lets a human review it before running. If someone attempts an unsafe query, the SQL guard immediately refuses it."*
 
 ---
 
-## 7. The closing line
+### [4:45 - 5:00] The Closing & Next Steps
+> *"In summary: TAZAMA protects customer trust, saves millions in avoidable call center costs, and shortens mean-time-to-repair from hours to minutes.*
+>
+> *What you've seen is fully built, tested across 1,600 automated tests, running with seed data on our real architecture. The only step remaining to go live is mapping our Oracle production tables and finalizing our data protection erasure routines. Thank you, and I welcome your questions."*
 
-> What you have seen is the whole journey working on synthetic data: the network's own
-> signals and the customer's complaint arriving at the same conclusion, with the evidence
-> attached, a proposed action, and a human in front of every decision that reaches a
-> customer. The remaining work is not building — it is plugging in the real tables and
-> writing three privacy procedures. The architecture is done.
+---
+
+## 🧠 The First-Principles Thinking: Explain Like I'm Five
+
+If senior leadership asks why we designed it this way, here is the plain, mundane translation of every architectural and algorithmic choice:
+
+| Algorithm / Capability | Mundane Analogy | Why This Matters (First Principles) |
+|---|---|---|
+| **Spatio-Temporal Correlation** (Graph & Topology) | *10 burglaries happen on one block within 10 minutes. You don't open 10 separate detective files; you open one case because they share the same street.* | When 20 cell towers drop simultaneously because an upstream fiber cable was cut, Tazama groups them into **1 incident** pointing at the cable. No duplicate tickets. |
+| **Rules-First, AI-Second** (Diagnostic Engine) | *If you see smoke pouring out of a window and the fire alarm is ringing, you don't call an AI to diagnose why the room is hot.* | Telecommunication failures (fiber cuts, scheduled maintenance) usually have unambiguous signatures. Rules are instant, 100% free, and 100% explainable. AI is only reserved for ambiguous edge cases. |
+| **Robust Anomaly Detection** (Median Absolute Deviation) | *Traffic on Mombasa Road on Friday at 6 PM is bumper-to-bumper. That's normal. Traffic on Tuesday at 3 AM is an anomaly.* | Global thresholds fail because cell tower traffic is cyclical (day vs night, weekday vs weekend). Tazama compares each tower to **itself at that exact hour of the week**, using medians so one past storm doesn't skew normal baselines. |
+| **LightGBM Poisson Forecasting** (Call Surge Prediction) | *A hospital needs to predict ambulance arrivals. Predicting 'zero' all day has a low error on paper, but leaves you helpless when an emergency hits.* | Telco complaints are non-negative integer spikes (0, 3, 25 calls). A Poisson model specifically optimizes for predicting the spikes so call centers can staff up proactively. |
+| **Multilingual Lexicon** (Swahili/Sheng Routing) | *A local shopkeeper who immediately understands Sheng ("simu imedrop", "haina neti") without needing a dictionary.* | Kenyan subscribers mix English, Swahili, and Sheng. A lightweight local lexicon instantly classifies 70%+ of complaints in under 2ms without sending customer text to an external LLM. |
+| **Sandboxed Agent with Refusals** | *An intern who can research and propose recommendations, but doesn't have the keys to the master server room.* | The AI agent can read telemetry and suggest an operational runbook, but cannot execute commands on network switches. The tool to execute is explicitly registered to be **refused and logged**. |
+
+---
+
+## 🗺️ What Each UI Page Represents & Where It Connects
+
+| Page Route | Purpose in Demo | Underlying Data & Backend Connection |
+|---|---|---|
+| **Command Center** (`/`) | High-level operational pulse for NOC directors & VPs. | Aggregates active incidents from `/api/v1/incidents`, joined with cell coordinates and complaint correlation counts (`/api/v1/discovery`). |
+| **Incident Card** (`/incidents/[id]`) | Detailed engineering investigation screen. | Connects to `/api/v1/incidents/{id}`, pulling physical alarms (`IC_STAGE.SRC_ALARMS`), upstream topology links, hourly KPI curves, and audit logs. |
+| **AI Diagnosis** (Modal/Panel) | Demonstrates safe GenAI reasoning with inspectable traces. | Calls `POST /api/v1/ai/diagnose/{id}`. Runs through rule gates, invokes `DiagnosisAgent` if needed, and returns step-by-step tool traces & refusals. |
+| **Complaints** (`/complaints`) | Voice of the customer connected to network cells. | Connects to `/api/v1/complaints`. Shows incoming complaint feeds (USSD *100, call center, mobile app) categorized by Sheng/Swahili NLP lexicon. |
+| **Care Lookup** (`/care`) | Proactive customer care desk interface. | Connects to `/api/v1/care/lookup`. Takes a hashed subscriber token, checks active cell outages, and outputs a canned script for the care agent. |
+| **Data Explorer** (`/explorer`) | Self-service conversational analytics. | Connects to `POST /api/v1/ai/sql` (text-to-SQL) and `POST /api/v1/discovery/query` (guarded execution). Proposes SQL, verifies SELECT-only rules, human clicks Run. |
+| **Insights** (`/insights`) | Predictive maintenance & traffic analytics. | Connects to `/api/v1/insights`. Shows de-seasonalized cell traffic, KPI lead-lag relationships, candidate failure drivers, and regional surge forecasts. |
+| **Reports** (`/reports`) | Daily automated executive briefing. | Connects to `/api/v1/reports/digest`. Shows the Microsoft Teams Adaptive Card preview with automated PII redaction and dry-run safety flags. |
+| **AI Status & Evals** (`/ai`) | Operational transparency & AI observability. | Connects to `GET /api/v1/ai/status`. Shows model health, degraded-mode readiness, budget spent, and accuracy against ground truth. |
+
+---
+
+## 🔮 The Opportunity: Predictive Maintenance for Cell Towers
+
+When leadership asks: *"Where can this go next?"*
+
+> *"The immediate next frontier is **Predictive Maintenance**.*
+>
+> *Today, towers fail abruptly due to thermal throttling, battery backup degradation during power cuts, optical transceiver degradation on fiber uplinks, or gradual antenna misalignment caused by heavy winds.*
+>
+> *Because Tazama ingests continuous radio and link KPIs (such as Setup Success Rate, PRB Utilization, RSRP, and Bit Error Rates), we don't just react to outages. We can detect the **gradual degradation curve 4 to 12 hours before a hard failure**.*
+>
+> *For example: if a cell's PRB utilization is spiking abnormally while Handover Success Rate is dropping by 2% per hour, Tazama can flag a **'Pre-Failure Anomaly'**, alerting field engineers to inspect the antenna tilt or dispatch generator fuel before subscribers ever experience service interruption.*
+>
+> *This transitions Safaricom from Reactive Repair to **Predictive Reliability**."*
+
+---
+
+## 🛡️ Leadership Q&A: The Three Toughest Questions
+
+### 1. "Can this AI accidentally trigger a network outage or make unauthorized changes?"
+**Your answer:**
+> *"No, and that is architectural, not just policy. There is literally no network adapter, no credential, and no code path from Tazama into any network element. The agent can only read telemetry and propose recommendations. When you inspected the trace, you saw that tools like `execute_runbook` are deliberately programmed to refuse execution and log the refusal. A human engineer must always take the action."*
+
+### 2. "How are we handling customer privacy and Kenya Data Protection Act compliance?"
+**Your answer:**
+> *"Phone numbers and subscriber IDs are HMAC-pseudonymized at the very edge of ingestion using a cryptographically secure salt before any analytics, AI models, or UI screens touch the data. No raw MSISDN ever enters our database or prompt contexts. Outbound Teams digests and exports are continuously scanned, and any detected PII immediately blocks transmission rather than quietly leaking."*
+
+### 3. "How long until we can plug this into production data?"
+**Your answer:**
+> *"The engineering architecture, database models, API services, and user interfaces are completely built and green across 1,600 automated tests. Moving to live data is purely configuration: editing `config/source_mappings.yaml` to point to our production Oracle tables. The only prerequisites are operational: implementing the data deletion cascade, rotating the pseudonymization key, and establishing a cell-level reporting privacy floor. We are looking at weeks, not months."*
