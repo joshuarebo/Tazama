@@ -3,479 +3,989 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>TAZAMA</title>
+<title>TAZAMA console</title>
 <style>
+/* Tokens copied from web/src/styles/tokens.css so this looks like the real console. */
 :root{
-  --bg:#fbfbfc; --card:#fff; --line:#e4e7ec; --soft:#f4f6f8;
-  --ink:#141a20; --mid:#596673; --dim:#8b96a2;
-  --a:#0f6f66; --a-soft:#e6f3f1; --a-line:#a5d4ce;
-  --warn:#8a5a10; --warn-soft:#fdf2dd;
-  --ok:#1a6b40; --ok-soft:#e6f4ea;
-  --r:12px;
-  --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  --brand:#2f7d23; --brand-strong:#1d4d16; --brand-soft:#e8f6e4;
+  --surface:#fff; --raised:#f7f8f7; --sunken:#eef0ee;
+  --line:#d7dbd7; --line-strong:#b4bab4;
+  --ink:#15201a; --muted:#5a6760; --inverse:#fff;
+  --danger:#c02525; --danger-soft:#fdeaea;
+  --warn:#8a5706; --warn-soft:#fdf3e2;
+  --info:#15607a; --info-soft:#e5f2f7;
+  --ok:#1a6a34; --ok-soft:#e6f4ea;
+  --r-sm:4px; --r:8px; --r-lg:14px;
+  --sh-sm:0 1px 2px rgb(21 32 26 / 8%);
+  --sh:0 2px 8px rgb(21 32 26 / 10%);
+  --sans:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  --mono:ui-monospace,"Cascadia Mono","Segoe UI Mono",Consolas,monospace;
 }
-@media (prefers-color-scheme:dark){:root{
-  --bg:#0f1419; --card:#161d24; --line:#2a333d; --soft:#1b232b;
-  --ink:#e9eef3; --mid:#a6b2be; --dim:#78848f;
-  --a:#4fbcb2; --a-soft:#10322f; --a-line:#1e544e;
-  --warn:#e0b468; --warn-soft:#2f2612;
-  --ok:#74d39b; --ok-soft:#10301f;
-}}
+html[data-theme="dark"]{
+  --brand:#5fd14a; --brand-strong:#8ae57a; --brand-soft:#16291a;
+  --surface:#10150f; --raised:#181f18; --sunken:#0a0e0a;
+  --line:#2b342c; --line-strong:#46524a;
+  --ink:#e8efe9; --muted:#a3b0a7; --inverse:#10150f;
+  --danger:#ff7b7b; --danger-soft:#3a1313;
+  --warn:#f0b659; --warn-soft:#3a2a0d;
+  --info:#6ec7e4; --info-soft:#0f2b35;
+  --ok:#6fd98c; --ok-soft:#102a18;
+  --sh-sm:0 1px 2px rgb(0 0 0 / 45%); --sh:0 2px 8px rgb(0 0 0 / 50%);
+}
 *{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--ink);
-  font:16px/1.6 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
-  -webkit-font-smoothing:antialiased}
-h1,h2,h3{margin:0;line-height:1.25;letter-spacing:-.02em}
+body{margin:0;background:var(--sunken);color:var(--ink);font:14px/1.5 var(--sans);
+  -webkit-font-smoothing:antialiased;display:flex;flex-direction:column;min-height:100vh}
+h1,h2,h3{margin:0;line-height:1.3}
 p{margin:0}
-.wrap{max-width:880px;margin:0 auto;padding:0 24px}
+.mono{font-family:var(--mono)}
+:focus-visible{outline:2px solid var(--brand);outline-offset:2px;border-radius:3px}
 
-/* header */
-header{border-bottom:1px solid var(--line);background:var(--card)}
-.top{display:flex;align-items:baseline;gap:14px;padding:22px 0 18px;flex-wrap:wrap}
-.logo{font-size:21px;font-weight:800;letter-spacing:.16em}
-.tag{font-size:14px;color:var(--dim)}
-nav{display:flex;gap:4px;padding-bottom:4px;overflow-x:auto}
-nav button{background:none;border:0;border-bottom:2px solid transparent;color:var(--mid);
-  font:inherit;font-size:15px;padding:10px 14px;cursor:pointer;white-space:nowrap;
-  transition:color .18s,border-color .18s}
-nav button:hover{color:var(--ink)}
-nav button[aria-current]{color:var(--a);border-color:var(--a);font-weight:600}
-:focus-visible{outline:2px solid var(--a);outline-offset:2px;border-radius:4px}
+/* ribbon + header, as in Shell.tsx */
+.ribbon{background:var(--warn-soft);color:var(--warn);font-size:11px;font-weight:600;
+  text-transform:uppercase;letter-spacing:.1em;text-align:center;padding:5px 16px}
+header.app{border-bottom:1px solid var(--line);background:var(--surface)}
+.hrow{max-width:1600px;margin:0 auto;display:flex;flex-wrap:wrap;align-items:center;
+  gap:16px;padding:12px 16px}
+.mark{display:flex;align-items:baseline;gap:6px}
+.mark i{width:16px;height:16px;border-radius:var(--r-sm);background:var(--brand);
+  display:inline-block;align-self:center}
+.mark b{font-size:18px;font-weight:700;letter-spacing:-.02em;color:var(--brand)}
+.mark span{font-size:12px;color:var(--muted)}
+nav.main{display:flex;flex:1;flex-wrap:wrap;gap:4px}
+nav.main button{background:none;border:0;border-radius:var(--r-sm);color:var(--muted);
+  font:inherit;font-size:14px;font-weight:500;padding:6px 12px;cursor:pointer}
+nav.main button:hover{background:var(--raised);color:var(--ink)}
+nav.main button[aria-current]{background:var(--brand-soft);color:var(--brand-strong)}
+.who{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--muted)}
+.who strong{color:var(--ink);font-weight:600}
 
-main{padding:48px 0 80px}
-.lead{font-size:21px;line-height:1.5;color:var(--ink)}
-.body{font-size:16px;color:var(--mid);margin-top:16px}
-h2.sec{font-size:27px;margin-bottom:10px}
-h3.sub{font-size:17px;margin-bottom:6px}
-.note{font-size:14px;color:var(--dim)}
+main{flex:1;width:100%;max-width:1600px;margin:0 auto;padding:20px 16px}
+footer.app{border-top:1px solid var(--line);background:var(--surface);padding:12px 16px}
+.frow{max-width:1600px;margin:0 auto;display:flex;flex-wrap:wrap;gap:8px;
+  justify-content:space-between;font-size:12px;color:var(--muted)}
 
-.card{background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:24px}
-.card+.card{margin-top:16px}
-.grid{display:grid;gap:16px}
-.g2{grid-template-columns:repeat(auto-fit,minmax(240px,1fr))}
+/* primitives, as in ui.tsx */
+.card{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);
+  box-shadow:var(--sh-sm);padding:16px}
+.card>h2{font-size:13px;font-weight:600;text-transform:uppercase;letter-spacing:.04em;
+  color:var(--muted);margin-bottom:12px;display:flex;justify-content:space-between;
+  align-items:baseline;gap:12px}
+.card>h2 em{font-style:normal;font-size:12px;font-weight:400;text-transform:none;
+  letter-spacing:0}
+.stat{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);
+  box-shadow:var(--sh-sm);padding:16px}
+.stat .l{font-size:12px;font-weight:500;text-transform:uppercase;letter-spacing:.04em;
+  color:var(--muted)}
+.stat .v{font-size:30px;font-weight:600;letter-spacing:-.02em;font-variant-numeric:tabular-nums;
+  margin-top:4px}
+.stat .h{font-size:12px;color:var(--muted);margin-top:4px}
+.v.danger{color:var(--danger)} .v.warn{color:var(--warn)}
+.v.ok{color:var(--ok)} .v.info{color:var(--info)}
+
+.g{display:grid;gap:16px}
 .g3{grid-template-columns:repeat(auto-fit,minmax(190px,1fr))}
+.g5{grid-template-columns:repeat(auto-fit,minmax(176px,1fr))}
+.split{display:grid;gap:16px;grid-template-columns:2fr 1fr;align-items:start}
+@media (max-width:900px){.split{grid-template-columns:1fr}}
 
-.sp{height:40px}
-.sp.s{height:24px}
+.badge{display:inline-flex;align-items:center;border:1px solid;border-radius:var(--r-sm);
+  padding:1px 6px;font-size:12px;white-space:nowrap}
+.badge.n{background:var(--raised);color:var(--muted);border-color:var(--line)}
+.badge.b{background:var(--brand-soft);color:var(--brand-strong);border-color:var(--brand)}
+.badge.d{background:var(--danger-soft);color:var(--danger);border-color:var(--danger)}
+.badge.w{background:var(--warn-soft);color:var(--warn);border-color:var(--warn)}
+.badge.i{background:var(--info-soft);color:var(--info);border-color:var(--info)}
+.badge.o{background:var(--ok-soft);color:var(--ok);border-color:var(--ok)}
+.badge.p3{background:var(--info-soft);color:var(--info);border-color:var(--info);font-weight:700}
 
-/* the walkthrough */
-.steps{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:22px}
-.steps button{background:var(--card);border:1px solid var(--line);border-radius:999px;
-  color:var(--mid);font:inherit;font-size:14px;padding:6px 14px;cursor:pointer;
-  transition:all .18s}
-.steps button:hover{border-color:var(--a-line)}
-.steps button[aria-pressed="true"]{background:var(--a);border-color:var(--a);color:#fff;
-  font-weight:600}
-@media (prefers-color-scheme:dark){.steps button[aria-pressed="true"]{color:#06211e}}
+table{width:100%;border-collapse:collapse;font-size:13px}
+caption{text-align:left;font-size:12px;color:var(--muted);padding-bottom:6px}
+th{text-align:left;font-size:11px;font-weight:600;text-transform:uppercase;
+  letter-spacing:.05em;color:var(--muted);padding:0 10px 6px 0;border-bottom:1px solid var(--line)}
+td{padding:8px 10px 8px 0;border-bottom:1px solid var(--line);vertical-align:top}
+tr:last-child td{border-bottom:0}
+th.n,td.n{text-align:right;padding-right:0;padding-left:14px;font-variant-numeric:tabular-nums}
+th.n:first-child,td.n:first-child{padding-left:0;padding-right:12px}
+tr.click{cursor:pointer}
+tr.click:hover td{background:var(--raised)}
+.scroll{overflow-x:auto}
 
-.stage{background:var(--card);border:1px solid var(--line);border-radius:var(--r);
-  padding:28px;min-height:270px;animation:in .3s ease}
-@keyframes in{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
-.stage .num{font-size:13px;font-weight:700;letter-spacing:.1em;color:var(--a);
-  text-transform:uppercase}
-.stage h3{font-size:24px;margin:8px 0 14px}
-.stage .what{font-size:17px;color:var(--ink);line-height:1.55}
-.stage .how{font-size:15px;color:var(--mid);margin-top:14px;line-height:1.6}
-.pill{display:inline-block;background:var(--soft);border:1px solid var(--line);
-  border-radius:8px;padding:10px 14px;margin-top:18px;font-size:14px;color:var(--mid)}
-.pill b{color:var(--ink)}
-.navrow{display:flex;gap:10px;margin-top:22px;align-items:center}
-.btn{background:var(--a);border:1px solid var(--a);color:#fff;border-radius:8px;
-  font:inherit;font-size:15px;padding:9px 18px;cursor:pointer;font-weight:600;
-  transition:filter .15s,transform .1s}
-.btn:hover{filter:brightness(1.1)}
-.btn:active{transform:translateY(1px)}
-.btn.ghost{background:none;color:var(--mid);border-color:var(--line);font-weight:500}
-.btn:disabled{opacity:.45;cursor:default}
-@media (prefers-color-scheme:dark){.btn{color:#06211e}}
+.btn{background:var(--brand);border:1px solid var(--brand);color:var(--inverse);
+  border-radius:var(--r-sm);font:inherit;font-size:13px;font-weight:600;padding:6px 14px;
+  cursor:pointer}
+.btn:hover{background:var(--brand-strong);border-color:var(--brand-strong)}
+.btn.sec{background:var(--surface);color:var(--ink);border-color:var(--line-strong);
+  font-weight:500}
+.btn.sec:hover{background:var(--raised)}
+.btn.sec[aria-pressed="true"]{background:var(--brand-soft);color:var(--brand-strong);
+  border-color:var(--brand)}
+.btn:disabled{opacity:.5;cursor:default}
 
-/* screen sketches */
-.shot{background:var(--card);border:1px solid var(--line);border-radius:var(--r);
-  overflow:hidden}
-.shot .bar{background:var(--soft);border-bottom:1px solid var(--line);padding:9px 14px;
-  font-size:13px;color:var(--dim);display:flex;gap:7px;align-items:center}
-.shot .bar i{width:9px;height:9px;border-radius:50%;background:var(--line);display:block}
-.shot .in{padding:20px}
-.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:16px;
-  margin-bottom:18px}
-.kpi .n{font-size:26px;font-weight:700;letter-spacing:-.025em}
-.kpi .l{font-size:12px;color:var(--dim);text-transform:uppercase;letter-spacing:.06em;
-  font-weight:600}
-.row{display:flex;justify-content:space-between;gap:12px;padding:9px 0;
-  border-top:1px solid var(--line);font-size:14px}
-.row:first-of-type{border-top:0}
-.row .r{color:var(--mid);white-space:nowrap}
-.chip{display:inline-block;font-size:12px;font-weight:600;padding:2px 8px;border-radius:999px}
-.chip.a{background:var(--a-soft);color:var(--a)}
-.chip.w{background:var(--warn-soft);color:var(--warn)}
-.chip.o{background:var(--ok-soft);color:var(--ok)}
+.pagehead{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;
+  gap:8px;margin-bottom:16px}
+.pagehead h1{font-size:20px;font-weight:600}
+.pagehead p{font-size:13px;color:var(--muted);margin-top:2px}
+.pagehead .right{text-align:right;font-size:12px;color:var(--muted)}
+.pagehead .right strong{color:var(--ink)}
 
-.quote{border-left:3px solid var(--a-line);padding:4px 0 4px 16px;color:var(--mid);
-  font-size:15px;margin-top:16px}
-.flag{background:var(--warn-soft);color:var(--warn);border-radius:10px;padding:14px 16px;
-  font-size:14.5px;line-height:1.6;margin-top:18px}
-.good{background:var(--ok-soft);color:var(--ok);border-radius:10px;padding:14px 16px;
-  font-size:14.5px;line-height:1.6;margin-top:18px}
+.note{border-radius:var(--r);padding:10px 12px;font-size:13px;line-height:1.55;margin-top:12px}
+.note.w{background:var(--warn-soft);color:var(--warn)}
+.note.o{background:var(--ok-soft);color:var(--ok)}
+.note.i{background:var(--info-soft);color:var(--info)}
+.note.n{background:var(--raised);color:var(--muted)}
+pre.code{background:var(--sunken);border:1px solid var(--line);border-radius:var(--r-sm);
+  padding:10px 12px;font-family:var(--mono);font-size:12.5px;margin:0;overflow-x:auto;
+  white-space:pre-wrap;line-height:1.55}
+textarea{width:100%;font-family:var(--mono);font-size:12.5px;padding:8px 10px;
+  border:1px solid var(--line-strong);border-radius:var(--r-sm);background:var(--surface);
+  color:var(--ink);min-height:80px;resize:vertical}
+dl.kv{display:grid;grid-template-columns:auto 1fr;gap:6px 16px;font-size:13px;margin:0}
+dl.kv dt{color:var(--muted)}
+dl.kv dd{margin:0}
+.bar{height:6px;background:var(--sunken);border-radius:999px;overflow:hidden}
+.bar i{display:block;height:100%;background:var(--brand);border-radius:999px}
+.muted{color:var(--muted);font-size:12px}
+.rowgap{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+details{border-top:1px solid var(--line);margin-top:12px;padding-top:10px}
+summary{cursor:pointer;font-size:13px;font-weight:600;color:var(--muted)}
+details[open] summary{margin-bottom:10px;color:var(--ink)}
 
-ul.list{margin:14px 0 0;padding-left:20px;color:var(--mid);font-size:15.5px}
-ul.list li{margin:8px 0}
-ul.list b{color:var(--ink)}
-
-footer{border-top:1px solid var(--line);padding:26px 0 40px;font-size:13.5px;color:var(--dim)}
-.mono{font-family:var(--mono);font-size:13px}
+figure{margin:0 0 16px}
+figure svg{width:100%;height:auto;display:block}
+figcaption{font-size:12px;color:var(--muted);margin-top:8px}
+.arch h3{font-size:15px;margin:20px 0 6px}
+.arch p{font-size:13.5px;color:var(--muted);line-height:1.65;margin:8px 0;max-width:80ch}
+.arch ul{font-size:13.5px;color:var(--muted);line-height:1.6;margin:8px 0;padding-left:20px;
+  max-width:80ch}
+.arch strong{color:var(--ink)}
 @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
-@media (max-width:620px){
-  main{padding:32px 0 60px}
-  h2.sec{font-size:23px}
-  .lead{font-size:19px}
-  .stage{padding:22px}
-}
 </style>
 </head>
 <body>
 
-<header>
-  <div class="wrap">
-    <div class="top">
-      <span class="logo">TAZAMA</span>
-      <span class="tag">Network care intelligence, demo with sample data</span>
+<div class="ribbon">Demo data, every subscriber, site and complaint here is synthetic</div>
+
+<header class="app">
+  <div class="hrow">
+    <span class="mark"><i></i><b>TAZAMA</b><span>network care intelligence</span></span>
+    <nav class="main" id="nav" aria-label="Main"></nav>
+    <div class="who">
+      <span>signed in as <strong id="rolename">admin</strong></span>
+      <button class="btn sec" id="theme" type="button">Theme</button>
     </div>
-    <nav id="nav" aria-label="Sections"></nav>
   </div>
 </header>
 
-<main class="wrap" id="main"></main>
+<main id="main"></main>
 
-<footer>
-  <div class="wrap">
-    All figures and names on this page are sample data, generated for demonstration.
-    No real customer, system or network element is shown. The wordmark is a placeholder.
+<footer class="app">
+  <div class="frow">
+    <span>Internal, confidential. Placeholder wordmark, not the official logo.</span>
+    <span>v0.1.0 · demo · times in Africa/Nairobi</span>
   </div>
 </footer>
 
 <script>
-/* ------------------------------------------------------------------ data */
+/* Figures below were read from the running application against its seeded
+   database. This page is a static replica of the console for review. */
 
-const STEPS = [
-  {
-    n: "Step 1",
-    h: "Something goes wrong",
-    what: "A cell in Nairobi starts dropping calls at 10:00. Nobody has reported it yet.",
-    how: "Two things notice at the same time. The network sends an alarm and its hourly performance numbers fall. Customers start sending messages through the app, SMS and the call centre.",
-    pill: "<b>Important:</b> the system does not wait for complaints. A fault with no complaints still raises an incident."
-  },
-  {
-    n: "Step 2",
-    h: "Work out who is affected",
-    what: "The complaint is matched to the cell that was serving that customer, and the customer's phone number is replaced with a code.",
-    how: "From that point on, nothing downstream sees a phone number. Not the reports, not the logs, not the AI.",
-    pill: "Today about <b>half</b> of complaints can be matched to a specific cell. That number is measured and shown, not hidden."
-  },
-  {
-    n: "Step 3",
-    h: "Group it into one incident",
-    what: "One broken fibre link can take 27 cells offline. Those become one incident, not 27 tickets.",
-    how: "The system knows how the network is wired, so it traces the affected cells upwards and finds the single piece of equipment they share.",
-    pill: "<b>Why this matters:</b> the engineer gets one ticket pointing at the actual broken thing, instead of 27 alarms to sift through."
-  },
-  {
-    n: "Step 4",
-    h: "Explain what is wrong",
-    what: "The system checks a set of rules first. Is there planned maintenance? Is there an alarm on shared equipment? Is the cell simply congested?",
-    how: "If the rules are confident, that is the answer and no AI is used. AI is only brought in for the unclear cases, and it has to point at the evidence it used.",
-    pill: "On our test cases the rules alone get the cause right <b>every time</b>, with no AI involved."
-  },
-  {
-    n: "Step 5",
-    h: "Decide how urgent it is",
-    what: "Number of customers affected, business accounts involved, service level exposure, how long it has been running.",
-    how: "Each of those contributes a visible amount to the score, so a priority can be explained months later if somebody questions it.",
-    pill: "<b>No black box.</b> You can always see why one incident ranked above another."
-  },
-  {
-    n: "Step 6",
-    h: "Tell the customer, if a person agrees",
-    what: "The system drafts a message from an approved template, in English and Swahili, and puts it in front of a human.",
-    how: "Nothing goes out automatically. The message cannot be freely written, quiet hours are respected, and anyone who opted out is skipped.",
-    pill: "<b>The person who writes the message cannot be the person who approves it.</b>"
-  },
-  {
-    n: "Step 7",
-    h: "Fix it, check it, report it",
-    what: "The system recommends a repair procedure, confirms afterwards that the numbers actually recovered, and closes the incident.",
-    how: "A daily summary goes to the network team's channel. Every decision along the way is recorded with who did it and why.",
-    pill: "Recommendations only. <b>The system has no ability to change anything on the network.</b>"
-  }
+const num = (v) => v.toLocaleString("en-US");
+const esc = (v) => String(v).replace(/[&<>"]/g, (c) =>
+  ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;" }[c]));
+
+const INC = [
+  { id:"INC_K8Y583VK8Q1CRF", t:"Transmission link failure on TND_MBXYJ688JBMC66",
+    cause:"transmission_link_failure", region:"Nairobi", cells:27, sites:9, subs:74950,
+    ent:52, cmp:35, sla:0.60, node:"TND_MBXYJ688JBMC66", kind:"transmission link",
+    start:"16 Mar 13:00", det:"17 Mar 03:45",
+    dx:{ cause:"planned_maintenance", conf:0.95,
+      sum:"Planned maintenance covers the affected window; no fault is implied.",
+      ref:"MWD_C9GMNDWN342EKT" } },
+  { id:"INC_N92B2N4AFKE2BQ", t:"Cell outage on site SIT_0A7ZKXM4922QFJ",
+    cause:"cell_outage", region:"Mombasa", cells:4, sites:1, subs:11114, ent:5, cmp:5,
+    sla:0.36, node:"SIT_0A7ZKXM4922QFJ", kind:"site",
+    start:"16 Mar 07:00", det:"17 Mar 03:45",
+    dx:{ cause:"cell_outage", conf:0.88,
+      sum:"Every cell on the site is unavailable and an alarm is raised on the site.",
+      ref:"ALM site-level" } },
+  { id:"INC_2SRKJRDK5HWEST", t:"Cell outage on site SIT_1T1RYAVSYW7CKH",
+    cause:"cell_outage", region:"Mombasa", cells:4, sites:1, subs:8566, ent:4, cmp:3,
+    sla:0.33, node:"SIT_1T1RYAVSYW7CKH", kind:"site",
+    start:"16 Mar 09:00", det:"17 Mar 03:45",
+    dx:{ cause:"cell_outage", conf:0.88,
+      sum:"Every cell on the site is unavailable and an alarm is raised on the site.",
+      ref:"ALM site-level" } },
 ];
 
-const VIEWS = {
-  why: () => `
-    <p class="lead">Right now a network fault becomes a customer problem before anyone
-      in the operations centre knows it is a fault.</p>
+const CELLS = [
+  [-1.151,37.019],[-1.149,37.016],[-1.287,36.821],[-1.292,36.818],[-1.301,36.845],
+  [-1.263,36.802],[-1.318,36.889],[-1.497,36.712],[-1.233,36.885],[-1.276,36.934],
+  [-4.043,39.668],[-4.051,39.662],[-4.062,39.671],[-4.038,39.681],
+  [-0.514,35.270],[-0.521,35.281],[-0.509,35.262],
+];
 
-    <p class="body">The network's own data saw it first. A cell's performance dropped, an
-      alarm went off. But nothing connects that to the forty people who are now calling to
-      complain, because those live in different systems owned by different teams.</p>
+const TOOLS = [
+  ["get_incident","read"],["get_alarms","read"],["get_kpi_window","read"],
+  ["get_complaint_summary","read"],["get_topology","read"],["get_maintenance","read"],
+  ["find_similar_incidents","read"],["list_runbooks","read"],["search_knowledge","read"],
+  ["propose_runbook","propose"],["propose_notification","propose"],
+  ["execute_runbook","never"],
+];
 
-    <p class="body">So three things go wrong at once.</p>
+const CALLED = [["get_incident",26.3],["get_alarms",39.0],["get_topology",110.2],
+  ["get_maintenance",18.7],["get_complaint_summary",31.4],["list_runbooks",12.1]];
 
-    <div class="sp s"></div>
-    <div class="grid g3">
-      <div class="card">
-        <h3 class="sub">The customer</h3>
-        <p class="note">Finds out their service is broken by trying to use it, then waits on
-          hold to be told something the operator already knew.</p>
-      </div>
-      <div class="card">
-        <h3 class="sub">The engineer</h3>
-        <p class="note">Spends the first hour of an incident gathering context from five
-          systems instead of fixing anything.</p>
-      </div>
-      <div class="card">
-        <h3 class="sub">The business</h3>
-        <p class="note">Pays for thousands of calls that only happened because nobody was
-          told.</p>
-      </div>
-    </div>
+const CMP = [
+  ["17 Mar 02:56","one_app","sheng","not resolved","slow_data","Data ime-kwama, hakuna kitu inaenda"],
+  ["17 Mar 02:43","one_app","en","Mombasa","slow_data","Data is crawling even though I have full bars"],
+  ["17 Mar 02:28","sms","mixed","Nakuru","voice_quality","Kuna echo kubwa on every call I make"],
+  ["17 Mar 02:27","call_centre","sw","Nakuru","unclassified","Mtandao ni mbaya sana leo"],
+  ["16 Mar 19:25","one_app","mixed","Nairobi","slow_data","Data iko slow sana, nothing is loading at all"],
+];
 
-    <div class="sp"></div>
-    <div class="card">
-      <h3 class="sub">What TAZAMA does</h3>
-      <p class="body" style="margin-top:8px">It joins the two halves. The network's own
-        signals on one side, what customers are saying on the other. When they line up, it
-        raises one incident, works out who is affected, explains the likely cause, and
-        proposes a message for a person to approve.</p>
-      <div class="quote">The network already knows. TAZAMA is the part that tells somebody.</div>
-    </div>
+const LAG = { x:[-6,-5,-4,-3,-2,-1,0,1,2,3,4,5,6],
+  y:[0.0135,0.0697,-0.0660,0.1138,-0.0740,-0.0019,-0.0493,-0.0495,0.0317,-0.0326,0.0541,0.0034,0.0552] };
 
-    <div class="sp"></div>
-    <h3 class="sub">What it is worth</h3>
-    <ul class="list">
-      <li><b>Fewer calls.</b> Every customer told before they call is a call that does not
-        happen. The system counts them.</li>
-      <li><b>Faster repairs.</b> Diagnosis starts with evidence attached instead of a blank
-        page.</li>
-      <li><b>Fewer surprises.</b> Service level exposure is visible per incident, rather
-        than discovered at the end of the month.</li>
-      <li><b>A path to predicting faults.</b> Covered on the last tab. It needs data we do
-        not currently collect, so it is honest to call it next, not now.</li>
-    </ul>`,
-
-  how: () => `
-    <h2 class="sec">Follow one fault through the system</h2>
-    <p class="body">Seven steps, start to finish. Click through them.</p>
-    <div class="sp s"></div>
-    <div class="steps" id="steps" role="group" aria-label="Steps">
-      ${STEPS.map((s, i) => `<button type="button" data-step="${i}"
-        aria-pressed="${i === step}">${i + 1}</button>`).join("")}
-    </div>
-    <div class="stage" id="stage">${stageHTML()}</div>`,
-
-  app: () => `
-    <h2 class="sec">What people actually see</h2>
-    <p class="body">Three of the screens, simplified. The real console has nine.</p>
-
-    <div class="sp s"></div>
-    <h3 class="sub">The operations centre view</h3>
-    <p class="note">Every live incident, ranked by how many customers it is hurting.</p>
-    <div class="sp s"></div>
-    <div class="shot">
-      <div class="bar"><i></i><i></i><i></i> Command centre</div>
-      <div class="in">
-        <div class="kpis">
-          <div class="kpi"><div class="l">Live</div><div class="n">17</div></div>
-          <div class="kpi"><div class="l">Customers hit</div><div class="n">140k</div></div>
-          <div class="kpi"><div class="l">Complaints today</div><div class="n">1,053</div></div>
-          <div class="kpi"><div class="l">Awaiting approval</div><div class="n">0</div></div>
-        </div>
-        <div class="row"><span><b>Transmission link down</b> <span class="chip w">27 cells</span></span>
-          <span class="r">Nairobi, 74,950 customers</span></div>
-        <div class="row"><span><b>Site offline</b> <span class="chip w">4 cells</span></span>
-          <span class="r">Mombasa, 11,114 customers</span></div>
-        <div class="row"><span><b>Congestion</b> <span class="chip a">6 cells</span></span>
-          <span class="r">Nairobi, 9,420 customers</span></div>
-      </div>
-    </div>
-
-    <div class="sp"></div>
-    <h3 class="sub">Inside one incident</h3>
-    <p class="note">What took an hour to assemble by hand is already here.</p>
-    <div class="sp s"></div>
-    <div class="shot">
-      <div class="bar"><i></i><i></i><i></i> Incident detail</div>
-      <div class="in">
-        <div class="row"><span class="r">Shared equipment</span>
-          <span class="mono">TND_MBXYJ688JBMC66</span></div>
-        <div class="row"><span class="r">Customers affected</span><span>74,950 across 27 cells</span></div>
-        <div class="row"><span class="r">Business accounts</span><span>52</span></div>
-        <div class="row"><span class="r">Likely cause</span>
-          <span>Planned maintenance <span class="chip o">confident</span></span></div>
-        <div class="row"><span class="r">Decided by</span><span>Rules, no AI needed</span></div>
-        <div class="good">The incident looked like a failure, but there was approved
-          maintenance covering that exact window. So nobody gets woken up. A system that
-          cannot tell planned work from a fault creates false alarms until people stop
-          trusting it.</div>
-      </div>
-    </div>
-
-    <div class="sp"></div>
-    <h3 class="sub">The call centre view</h3>
-    <p class="note">What the agent sees when the customer rings.</p>
-    <div class="sp s"></div>
-    <div class="shot">
-      <div class="bar"><i></i><i></i><i></i> Customer lookup</div>
-      <div class="in">
-        <div class="row"><span class="r">Customer</span>
-          <span class="mono">SUB-INQCJH5UOHGNLAP2</span></div>
-        <div class="row"><span class="r">Area</span><span>Nairobi, Langata</span></div>
-        <div class="row"><span class="r">Known problem</span>
-          <span>Yes <span class="chip w">being worked on</span></span></div>
-        <div class="sp s"></div>
-        <p class="note" style="font-weight:600;color:var(--mid)">Approved wording, read as written</p>
-        <div class="quote" style="margin-top:8px">We are aware of a service problem in your
-          area and our engineers are working on it. We are sorry for the disruption.</div>
-        <div class="flag">There is no free text box on this screen. The agent reads an
-          approved message. Nobody invents a restoration time, because an invented promise
-          repeated across a call centre is worse than saying nothing.</div>
-      </div>
-    </div>`,
-
-  next: () => `
-    <h2 class="sec">What it would take to run this for real</h2>
-    <p class="body">The software is built and tested. What is left is access and
-      permission, not construction.</p>
-
-    <div class="sp s"></div>
-    <div class="card">
-      <h3 class="sub">1. Connect the data</h3>
-      <p class="body" style="margin-top:8px">Ten feeds, all read only. Site and cell
-        records, network alarms, hourly performance figures, planned maintenance, customer
-        records, complaints and call centre logs.</p>
-      <p class="note" style="margin-top:12px">Pointing at real tables is a configuration
-        change, not a code change. The system never writes back to any of them.</p>
-    </div>
-
-    <div class="card">
-      <h3 class="sub">2. Three privacy steps before any real customer record</h3>
-      <ul class="list" style="font-size:15px">
-        <li><b>Deletion.</b> Removing a customer has to remove everything derived from them.</li>
-        <li><b>Key rotation.</b> Agreeing what happens to past reporting when the code that
-          hides phone numbers is changed.</li>
-        <li><b>A minimum group size</b> below which a single cell is not reported on its own.</li>
-      </ul>
-      <p class="note" style="margin-top:12px">Days of work each, but they are obligations
-        rather than nice to have.</p>
-    </div>
-
-    <div class="card">
-      <h3 class="sub">3. Two operational pieces</h3>
-      <p class="body" style="margin-top:8px">A Teams channel address so the daily summary
-        can actually be delivered, and a connection to an internal AI model so the assisted
-        parts can be tested against the real thing rather than a stand in.</p>
-    </div>
-
-    <div class="sp"></div>
-    <h2 class="sec" style="font-size:22px">Where this goes next</h2>
-    <p class="body">Today the system spots a fault early. Predicting one before it happens
-      is a different capability, and it needs readings we do not collect yet. Three
-      realistic places to start:</p>
-
-    <div class="sp s"></div>
-    <div class="grid g3">
-      <div class="card">
-        <h3 class="sub">Power and batteries</h3>
-        <p class="note">Watch how fast a site's battery drains against its own normal. Flag
-          it hours before the site goes dark, so a crew refuels first.</p>
-        <p class="note" style="margin-top:10px;color:var(--a);font-weight:600">Start here.
-          One data feed, easy to prove.</p>
-      </div>
-      <div class="card">
-        <h3 class="sub">Fibre links</h3>
-        <p class="note">Transmission equipment degrades for weeks before it fails. Rising
-          error counts would flag it days ahead, turning a 2am emergency into planned work.</p>
-      </div>
-      <div class="card">
-        <h3 class="sub">Antenna alignment</h3>
-        <p class="note">Wind shifts an antenna and coverage shrinks. A one sided drop on a
-          single sector points at it, without sending someone to climb the tower.</p>
-      </div>
-    </div>
-
-    <div class="flag">To be straight about it: none of these three is built, and all of them
-      need data the network team would have to give us. The groundwork they rely on,
-      knowing what normal looks like for each piece of equipment, is already there.</div>
-
-    <div class="sp"></div>
-    <div class="card">
-      <h3 class="sub">What this demo is not</h3>
-      <ul class="list" style="font-size:15px">
-        <li>The data is invented. It is shaped to look realistic, but it is not real
-          traffic, and accuracy here does not predict accuracy on real data.</li>
-        <li>The system cannot act on the network, and that is deliberate.</li>
-        <li>AI suggests. Rules decide. People approve.</li>
-      </ul>
-    </div>`
+const SQL = {
+  gen:"SELECT region, COUNT(*) AS complaints\nFROM complaint\nWHERE region IS NOT NULL\nGROUP BY region\nORDER BY complaints DESC",
+  ran:"SELECT region, COUNT(*) AS complaints FROM complaint WHERE NOT region IS NULL GROUP BY region ORDER BY complaints DESC LIMIT 1000",
+  rows:[["Nairobi",6074],["Mombasa",3791],["Kisumu",3226],["Nakuru",3173],["Eldoret",2118]],
+  warn:["A row limit of 1000 was added.",
+    "No time bound on complaint: this may scan the whole table. Add a predicate on a time column."],
 };
 
-const TABS = [
-  ["why", "Why it exists"],
-  ["how", "How it works"],
-  ["app", "What it looks like"],
-  ["next", "Going live"]
+/* --------------------------------------------------------------- state */
+const S = { page:"home", inc:INC[0].id, diagnosed:false, sql:"", ran:null, lag:3 };
+
+/* ------------------------------------------------------------- screens */
+
+function pHome() {
+  return `
+  <div class="pagehead">
+    <div><h1>Command Center</h1>
+      <p>Network data through 17 Mar 2026, 02:45 EAT</p></div>
+    <div class="right"><div>complaint to cell coverage <strong>52.0%</strong></div>
+      <div>the hardest join in the product, measured on every run</div></div>
+  </div>
+
+  <div class="g g5" style="margin-bottom:16px">
+    <div class="stat"><div class="l">Live incidents</div><div class="v danger">17</div>
+      <div class="h">2 suppressed</div></div>
+    <div class="stat"><div class="l">P1 / P2</div><div class="v">0 / 0</div>
+      <div class="h">need attention now</div></div>
+    <div class="stat"><div class="l">Subscribers affected</div><div class="v warn">140,201</div>
+      <div class="h">estimated from cell exposure</div></div>
+    <div class="stat"><div class="l">Complaints (24h)</div><div class="v">1,053</div>
+      <div class="h">69 correlated to an incident</div></div>
+    <div class="stat"><div class="l">Notifications waiting</div><div class="v">0</div>
+      <div class="h">proposed, awaiting a human</div></div>
+  </div>
+
+  <div class="split" style="margin-bottom:16px">
+    <section class="card"><h2>Affected cells <em>17 cells</em></h2>
+      ${mapSvg()}
+      <p class="muted" style="margin-top:8px">Cell positions are plotted from the site
+        records. The console renders real map tiles when a tile server is configured, and
+        works without one.</p></section>
+    <div class="g" style="align-content:start">
+      <section class="card"><h2>Probable cause</h2>
+        ${barRows([["Congestion",13],["Cell outage",3],["Transmission link failure",1]])}</section>
+      <section class="card"><h2>By region</h2>
+        <table><caption>Incidents by region</caption>
+          <thead><tr><th>Region</th><th class="n">Incidents</th><th class="n">Subscribers</th></tr></thead>
+          <tbody>
+            <tr><td>Nairobi</td><td class="n">8</td><td class="n">96,790</td></tr>
+            <tr><td>Eldoret</td><td class="n">7</td><td class="n">23,731</td></tr>
+            <tr><td>Mombasa</td><td class="n">2</td><td class="n">19,680</td></tr>
+          </tbody></table></section>
+    </div>
+  </div>
+
+  <section class="card"><h2>Live incidents <em>select a row to open it</em></h2>
+    <div class="scroll"><table><caption>Live incidents, highest impact first</caption>
+      <thead><tr><th>Priority</th><th>Incident</th><th>Cause</th><th>Region</th>
+        <th class="n">Cells</th><th class="n">Subscribers</th><th class="n">Complaints</th>
+        <th>Status</th></tr></thead>
+      <tbody>${INC.map((i) => `<tr class="click" data-inc="${i.id}" tabindex="0" role="button"
+        aria-label="Open ${i.id}">
+        <td><span class="badge p3">P3</span></td>
+        <td><strong>${esc(i.t)}</strong><div class="muted mono">${i.id}</div></td>
+        <td><span class="badge n">${i.cause.replace(/_/g," ")}</span></td>
+        <td>${i.region}</td><td class="n">${i.cells}</td><td class="n">${num(i.subs)}</td>
+        <td class="n">${i.cmp}</td><td><span class="badge b">detected</span></td></tr>`).join("")}
+      </tbody></table></div>
+    <p class="muted" style="margin-top:8px">Showing 3 of 17.</p></section>`;
+}
+
+function mapSvg() {
+  const lats = CELLS.map((c) => c[0]), lons = CELLS.map((c) => c[1]);
+  const la0 = Math.min(...lats), la1 = Math.max(...lats);
+  const lo0 = Math.min(...lons), lo1 = Math.max(...lons);
+  const x = (lo) => 20 + (lo - lo0) / (lo1 - lo0 || 1) * 620;
+  const y = (la) => 170 - (la - la0) / (la1 - la0 || 1) * 140;
+  return `<svg viewBox="0 0 660 200" role="img" aria-label="Cells affected by live incidents, plotted by position">
+    <rect x="0" y="0" width="660" height="200" rx="6" fill="var(--sunken)"/>
+    ${[0,1,2,3,4].map((k) => `<line x1="0" y1="${k*40+20}" x2="660" y2="${k*40+20}"
+      stroke="var(--line)" stroke-width="1"/>`).join("")}
+    ${CELLS.map(([la,lo]) => `<circle cx="${x(lo).toFixed(1)}" cy="${y(la).toFixed(1)}" r="6"
+      fill="var(--danger)" fill-opacity="0.65" stroke="var(--danger)" stroke-width="1.5"/>`).join("")}
+  </svg>`;
+}
+
+function barRows(rows) {
+  const max = Math.max(...rows.map((r) => r[1]));
+  return rows.map(([l, v]) => `<div style="margin-bottom:10px">
+    <div class="rowgap" style="justify-content:space-between;font-size:13px">
+      <span>${l}</span><span class="mono">${v}</span></div>
+    <div class="bar" style="margin-top:4px"><i style="width:${v/max*100}%"></i></div></div>`).join("");
+}
+
+function pIncident() {
+  const i = INC.find((x) => x.id === S.inc) || INC[0];
+  return `
+  <div class="pagehead">
+    <div><p class="muted"><a href="#" data-go="home" style="color:var(--brand)">Command Center</a>
+      / incident</p>
+      <h1>${esc(i.t)}</h1>
+      <p class="mono">${i.id} · opened ${i.start} · detected ${i.det}</p></div>
+    <div class="rowgap"><span class="badge p3">P3</span>
+      <span class="badge b">detected</span></div>
+  </div>
+
+  <div class="g g5" style="margin-bottom:16px">
+    <div class="stat"><div class="l">Cells</div><div class="v">${i.cells}</div>
+      <div class="h">${i.sites} site${i.sites === 1 ? "" : "s"}</div></div>
+    <div class="stat"><div class="l">Subscribers</div><div class="v warn">${num(i.subs)}</div>
+      <div class="h">estimated exposure</div></div>
+    <div class="stat"><div class="l">Enterprise</div><div class="v">${i.ent}</div>
+      <div class="h">accounts in footprint</div></div>
+    <div class="stat"><div class="l">Complaints</div><div class="v">${i.cmp}</div>
+      <div class="h">correlated to this incident</div></div>
+    <div class="stat"><div class="l">SLA risk</div><div class="v info">${i.sla.toFixed(2)}</div>
+      <div class="h">weighted rule</div></div>
+  </div>
+
+  <div class="split" style="margin-bottom:16px">
+    <section class="card"><h2>Evidence</h2>
+      <dl class="kv">
+        <dt>Shared element</dt><dd class="mono">${i.node}</dd>
+        <dt>Element type</dt><dd>${i.kind}</dd>
+        <dt>Region</dt><dd>${i.region}</dd>
+        <dt>Alarm</dt><dd>raised on the shared element</dd>
+        <dt>Maintenance</dt><dd>${i.dx.cause === "planned_maintenance"
+          ? '<span class="badge w">approved window covers this period</span>' : "none in window"}</dd>
+      </dl>
+      <div class="note n">All ${i.cells} cells sit below the same ${i.kind}, and the alarm is
+        on that element. One fault with a ${i.cells} cell footprint, not ${i.cells} faults.</div>
+    </section>
+    <section class="card"><h2>Diagnosis</h2>
+      <dl class="kv">
+        <dt>Cause</dt><dd><strong>${i.dx.cause.replace(/_/g," ")}</strong></dd>
+        <dt>Confidence</dt><dd>${i.dx.conf.toFixed(2)} <span class="muted">floor 0.55</span></dd>
+        <dt>Method</dt><dd><span class="badge o">rules</span></dd>
+        <dt>Evidence</dt><dd class="mono">${i.dx.ref}</dd>
+      </dl>
+      <p style="font-size:13px;margin-top:10px">${esc(i.dx.sum)}</p>
+    </section>
+  </div>
+
+  <section class="card"><h2>AI diagnosis <em>optional, spends model budget</em></h2>
+    <div class="rowgap">
+      <button class="btn" id="diagnose" ${S.diagnosed ? "disabled" : ""}>
+        ${S.diagnosed ? "Diagnosed" : "Run the agent"}</button>
+      <span class="muted">${S.diagnosed
+        ? "The rules answered, so no model was called."
+        : "Nothing runs until you press this."}</span></div>
+    ${S.diagnosed ? agentPanel(i) : ""}
+  </section>`;
+}
+
+function agentPanel(i) {
+  return `
+  <div class="note o">Answered by the deterministic rules at ${i.dx.conf.toFixed(2)},
+    above the 0.55 floor, so the model was never called.</div>
+  <details open><summary>What the agent did, 6 tools called, 0 refused</summary>
+    <dl class="kv" style="margin-bottom:12px">
+      <dt>Agent</dt><dd>DiagnosisAgent</dd>
+      <dt>Budget</dt><dd>2 of 4 steps · 6 of 10 tool calls · 0.31 s of 20 s</dd>
+      <dt>Stopped</dt><dd>the rules answered above the certainty floor</dd></dl>
+    <div class="scroll"><table><caption>Tools called, in order</caption>
+      <thead><tr><th>Tool</th><th>Tier</th><th class="n">Time</th></tr></thead>
+      <tbody>${CALLED.map(([n, ms]) => `<tr><td class="mono">${n}</td>
+        <td><span class="badge o">read</span></td><td class="n">${ms.toFixed(1)} ms</td></tr>`).join("")}
+      </tbody></table></div>
+    <div class="note w"><strong>execute_runbook</strong> is registered at tier
+      <strong>never</strong>. A request to run it is refused by the harness and written to
+      the trace. The agent holds no network credentials.</div></details>`;
+}
+
+function pComplaints() {
+  return `
+  <div class="pagehead">
+    <div><h1>Complaints</h1><p>Across app, SMS, USSD, call centre and social</p></div>
+    <div class="right"><div>classified by lexicon <strong>69.1%</strong> exact</div>
+      <div>30% routed to a human for review</div></div>
+  </div>
+  <section class="card">
+    <h2>Recent complaints <em>1,053 in the last 24 hours</em></h2>
+    <div class="scroll"><table><caption>Recent complaints</caption>
+      <thead><tr><th>Received</th><th>Channel</th><th>Language</th><th>Region</th>
+        <th>Category</th><th>Text</th></tr></thead>
+      <tbody>${CMP.map(([at, ch, lg, rg, cat, tx]) => `<tr>
+        <td class="muted">${at}</td><td>${ch}</td><td><span class="badge n">${lg}</span></td>
+        <td>${rg}</td><td>${cat === "unclassified"
+          ? '<span class="badge w">unclassified</span>'
+          : '<span class="badge i">' + cat.replace(/_/g," ") + "</span>"}</td>
+        <td>${esc(tx)}</td></tr>`).join("")}</tbody></table></div>
+    <div class="note i">The fourth row says the network is bad but names no symptom, so it
+      stays unclassified and still counts towards the incident. That phrasing is a large
+      share of real traffic.</div>
+  </section>`;
+}
+
+function pCare() {
+  return `
+  <div class="pagehead">
+    <div><h1>Care lookup</h1><p>What the agent sees while the customer is on the line</p></div>
+  </div>
+  <div class="split">
+    <section class="card"><h2>Subscriber</h2>
+      <dl class="kv">
+        <dt>Token</dt><dd class="mono">SUB-INQCJH5UOHGNLAP2</dd>
+        <dt>Region</dt><dd>Nairobi</dd>
+        <dt>Segment</dt><dd>SME</dd>
+        <dt>Enterprise</dt><dd>no</dd>
+        <dt>Serving cell</dt><dd>Langata 054-4G-2 <span class="muted">(4G)</span></dd>
+        <dt>Last seen</dt><dd>13 Mar 21:53</dd>
+        <dt>Opted out</dt><dd>no</dd></dl>
+      <div class="note n">The phone number is replaced by a one way token at ingestion. This
+        screen, the logs, the reports and the AI all see the token and never the number.</div>
+    </section>
+    <section class="card"><h2>Known issue in this area</h2>
+      <dl class="kv">
+        <dt>Incident</dt><dd class="mono">INC_K8Y583VK8Q1CRF</dd>
+        <dt>Priority</dt><dd><span class="badge p3">P3</span></dd>
+        <dt>Cause</dt><dd>transmission link failure</dd>
+        <dt>Also affected</dt><dd>74,950 subscribers</dd>
+        <dt>Message sent</dt><dd><span class="badge w">not yet, awaiting approval</span></dd></dl>
+      <p class="muted" style="margin:12px 0 6px;font-weight:600">Approved wording</p>
+      <pre class="code">We are aware of a service problem in your area (transmission link failure) and our engineers are working on it. We are sorry for the disruption.</pre>
+      <div class="rowgap" style="margin-top:8px">
+        <button class="btn sec" id="copy">Copy</button>
+        <span class="muted" id="copied"></span></div>
+      <div class="note w">There is no free text box. The agent reads an approved template.
+        A model may fill slots in it and may never write prose to a customer.</div>
+    </section>
+  </div>`;
+}
+
+function pExplorer() {
+  return `
+  <div class="pagehead">
+    <div><h1>Data Explorer</h1><p>Read only, allowlisted tables, row cap, timeout, audited</p></div>
+  </div>
+  <div class="split">
+    <section class="card"><h2>Query</h2>
+      <textarea id="sqlbox" aria-label="SQL">${esc(S.sql)}</textarea>
+      <div class="rowgap" style="margin-top:8px">
+        <button class="btn" id="run">Run query</button>
+        <button class="btn sec" id="sample">Load the sample query</button>
+        <button class="btn sec" id="danger">Try to delete data</button></div>
+      <div id="out">${S.ran === null ? "" : runOut(S.ran)}</div>
+    </section>
+    <section class="card"><h2>Ask in plain English</h2>
+      <p style="font-size:13px">A question goes to the model, which writes SQL. The SQL is
+        shown for a person to read. The existing guard is the only thing that executes it.</p>
+      <pre class="code" style="margin-top:10px">Which regions have the most complaints?</pre>
+      <pre class="code" style="margin-top:8px">${esc(SQL.gen)}</pre>
+      <div class="rowgap" style="margin-top:8px">
+        <span class="badge o">the guard would accept this</span>
+        <span class="badge n">not executed</span></div>
+      <div class="note n">The risky failure is not a destructive statement, the guard stops
+        those. It is a query that is valid and subtly wrong. Showing the SQL makes that
+        reviewable.</div>
+    </section>
+  </div>`;
+}
+
+function runOut(sql) {
+  const s = sql.trim().replace(/;\s*$/, "");
+  if (!s) return `<div class="note w">Nothing to run.</div>`;
+  if (s.includes(";")) return `<div class="note w"><strong>Refused by the SQL guard.</strong>
+    Only a single statement may run.</div>`;
+  const head = s.replace(/^\(+\s*/, "").toUpperCase();
+  if (!(head.startsWith("SELECT") || head.startsWith("WITH"))) {
+    return `<div class="note w"><strong>Refused by the SQL guard.</strong> The statement is
+      parsed into a syntax tree, not matched as a string, and only reads are executed. The
+      attempt is audited against your role.</div>`;
+  }
+  const known = s.replace(/\s+/g, " ").toUpperCase() === SQL.gen.replace(/\s+/g, " ").toUpperCase();
+  if (!known) return `<div class="note o"><strong>The guard would accept this.</strong></div>
+    <div class="note n">No rows are shown because this review copy has no database. Results
+      are canned for the sample query only.</div>`;
+  return `<div class="note o">28.4 ms · 5 rows · audited</div>
+    <div class="scroll" style="margin-top:10px"><table><caption>Query result</caption>
+      <thead><tr><th>region</th><th class="n">complaints</th></tr></thead>
+      <tbody>${SQL.rows.map((r) => `<tr><td>${r[0]}</td><td class="n">${num(r[1])}</td></tr>`).join("")}
+      </tbody></table></div>
+    <details><summary>What the guard actually ran</summary>
+      <pre class="code">${esc(SQL.ran)}</pre>
+      <ul class="muted" style="margin-top:8px;padding-left:18px">
+        ${SQL.warn.map((w) => `<li>${esc(w)}</li>`).join("")}</ul></details>`;
+}
+
+function pInsights() {
+  const max = Math.max(...LAG.y.map(Math.abs));
+  return `
+  <div class="pagehead">
+    <div><h1>Insights</h1><p>2 Mar to 16 Mar 2026, 336 hours</p></div>
+  </div>
+  <div class="g g3" style="margin-bottom:16px">
+    <div class="stat"><div class="l">Forecast error</div><div class="v">0.0057</div>
+      <div class="h">baseline 0.0067, better by 15.7%</div></div>
+    <div class="stat"><div class="l">Anomaly recall</div><div class="v">0.60</div>
+      <div class="h">3.93% of cell hours flagged</div></div>
+    <div class="stat"><div class="l">Busiest cell</div><div class="v" style="font-size:20px">Nairobi CBD 070</div>
+      <div class="h">49 complaints in the window</div></div>
+  </div>
+  <section class="card"><h2>Does the network degrade before customers complain?
+    <em>Nairobi CBD 070-4G-3 · availability_pct</em></h2>
+    <div style="display:flex;align-items:flex-end;gap:6px;height:140px;padding-top:10px">
+      ${LAG.x.map((lag, k) => `<button type="button" data-lag="${k}"
+        aria-pressed="${S.lag === k}" aria-label="lag ${lag} hours, r ${LAG.y[k].toFixed(4)}"
+        style="flex:1;display:flex;flex-direction:column;justify-content:flex-end;
+        align-items:center;gap:4px;background:none;border:0;cursor:pointer;padding:0">
+        <span style="width:100%;max-width:30px;border-radius:3px 3px 0 0;min-height:2px;
+          height:${Math.max(2, Math.abs(LAG.y[k]) / max * 110)}px;
+          background:${S.lag === k ? "var(--brand)" : LAG.y[k] < 0 ? "var(--line-strong)" : "var(--line-strong)"}"></span>
+        <span class="muted" style="font-size:10px">${lag}</span></button>`).join("")}
+    </div>
+    <dl class="kv" style="margin-top:12px">
+      <dt>Selected lag</dt><dd>${LAG.x[S.lag]} h</dd>
+      <dt>Correlation</dt><dd>${LAG.y[S.lag].toFixed(4)}</dd>
+      <dt>KPI leads complaints</dt><dd><span class="badge w">no</span></dd></dl>
+    <div class="note w"><strong>The honest answer on this data is no.</strong> The strongest
+      correlation anywhere in the scan is 0.11, which is very weak, and the tool reports that
+      the KPI does not lead. It also publishes its own reasons for distrusting even that: the
+      rate is normalised by an estimated subscriber count, 13 lags were scanned and the best
+      kept, and the sign is the opposite of this KPI's polarity. On real data this becomes a
+      measurement. On synthetic data it correctly refuses to claim one.</div>
+  </section>`;
+}
+
+function pReports() {
+  return `
+  <div class="pagehead">
+    <div><h1>Reports</h1><p>Daily and weekly digest for the network care channel</p></div>
+    <div class="rowgap"><span class="badge w">dry run, nothing is sent</span></div>
+  </div>
+  <section class="card"><h2>TAZAMA daily network-care digest
+    <em>RPT-DAILY-20260316T0046</em></h2>
+    <table><caption>Headline figures, 16 Mar 03:46 to 17 Mar 03:46 EAT</caption>
+      <tbody>
+        <tr><th style="width:40%;border-bottom:1px solid var(--line);padding-bottom:8px">Incidents</th><td><strong>17 live, 2 suppressed</strong></td></tr>
+        <tr><th style="border-bottom:1px solid var(--line);padding-bottom:8px">By priority</th><td><strong>P3 x 17</strong></td></tr>
+        <tr><th style="border-bottom:1px solid var(--line);padding-bottom:8px">Subscribers affected</th><td><strong>140,201</strong></td></tr>
+        <tr><th style="border-bottom:1px solid var(--line);padding-bottom:8px">Complaints</th><td><strong>1,042 received, 69 correlated</strong></td></tr>
+        <tr><th>Awaiting approval</th><td><strong>0 proposed notifications</strong></td></tr>
+      </tbody></table>
+    <div class="note o">Outbound delivery is off by default. The webhook address is never
+      logged and no card carries a phone number. Turning delivery on is a deliberate
+      per-environment change.</div>
+  </section>`;
+}
+
+function pAi() {
+  return `
+  <div class="pagehead">
+    <div><h1>AI quality</h1><p>What the model is, what it cost, and what each agent may touch</p></div>
+    <div class="rowgap"><span class="badge o">endpoint reachable</span></div>
+  </div>
+  <div class="g g5" style="margin-bottom:16px">
+    <div class="stat"><div class="l">Model calls</div><div class="v">5</div>
+      <div class="h">1 served from cache</div></div>
+    <div class="stat"><div class="l">Tokens</div><div class="v">5,271</div>
+      <div class="h">of a 2,000,000 ceiling</div></div>
+    <div class="stat"><div class="l">Degraded answers</div><div class="v ok">0</div>
+      <div class="h">fell back to the rules</div></div>
+    <div class="stat"><div class="l">Agents</div><div class="v">3</div>
+      <div class="h">each with a hard ceiling</div></div>
+    <div class="stat"><div class="l">Tools</div><div class="v">12</div>
+      <div class="h">9 read, 2 propose, 1 never</div></div>
+  </div>
+  <div class="split">
+    <section class="card"><h2>Tool registry</h2>
+      <div class="scroll"><table><caption>Every tool and its permission tier</caption>
+        <thead><tr><th>Tool</th><th>Tier</th></tr></thead>
+        <tbody>${TOOLS.map(([n, t]) => `<tr><td class="mono">${n}</td>
+          <td><span class="badge ${t === "read" ? "o" : t === "propose" ? "w" : "d"}">${t}</span></td>
+          </tr>`).join("")}</tbody></table></div>
+      <div class="note n">Permission is a property of the tool, never derived from text. The
+        ceiling is enforced by the harness that runs the tools, not by the prompt.</div>
+    </section>
+    <section class="card"><h2>Agents and fallbacks</h2>
+      <div class="scroll"><table><caption>The three agents</caption>
+        <thead><tr><th>Agent</th><th>Ceiling</th><th>If the model is gone</th></tr></thead>
+        <tbody>
+          <tr><td><strong>DiagnosisAgent</strong></td><td><span class="badge w">propose</span></td>
+            <td>deterministic rules, 7 of 7 on the labelled scenarios</td></tr>
+          <tr><td><strong>KnowledgeAssistant</strong></td><td><span class="badge o">read</span></td>
+            <td>the retrieved excerpt with its citation</td></tr>
+          <tr><td><strong>Reporter</strong></td><td><span class="badge o">read</span></td>
+            <td>a template rendered digest, no model prose</td></tr>
+        </tbody></table></div>
+      <div class="note o">The product does not degrade from AI to broken. It degrades from AI
+        to the rules, and every screen records which path answered.</div>
+    </section>
+  </div>`;
+}
+
+/* ------------------------------------------------------- architecture */
+
+function dFlow() {
+  const b = (x, y, w, t, s, hl) => `
+    <rect x="${x}" y="${y}" width="${w}" height="52" rx="7"
+      fill="${hl ? "var(--brand-soft)" : "var(--surface)"}"
+      stroke="${hl ? "var(--brand)" : "var(--line-strong)"}" stroke-width="1.4"/>
+    <text x="${x + w / 2}" y="${y + 22}" text-anchor="middle" font-size="12.5"
+      font-weight="600" fill="var(--ink)">${t}</text>
+    <text x="${x + w / 2}" y="${y + 38}" text-anchor="middle" font-size="10.5"
+      fill="var(--muted)">${s}</text>`;
+  const a = (x1, y1, x2, y2) => `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}"
+    stroke="var(--line-strong)" stroke-width="1.6" marker-end="url(#m)"/>`;
+  return `<svg viewBox="0 0 960 400" role="img"
+    aria-label="Source systems feed ingestion, then enrichment, correlation, diagnosis and prioritisation, with a human approving before any customer is contacted">
+    <defs><marker id="m" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="5" markerHeight="5"
+      orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="var(--line-strong)"/></marker></defs>
+    <text x="0" y="12" font-size="10.5" font-weight="700" fill="var(--muted)"
+      letter-spacing="0.08">SOURCES, READ ONLY</text>
+    ${b(0, 20, 200, "Network", "KPIs, alarms, topology")}
+    ${b(214, 20, 200, "Customer", "complaints, care calls")}
+    ${b(428, 20, 200, "Reference", "HLR, CBS, maintenance")}
+    ${a(314, 76, 314, 104)}
+    ${b(128, 110, 372, "Ingestion boundary", "validate, normalise, pseudonymise the MSISDN")}
+    ${a(314, 166, 314, 194)}
+    ${b(0, 200, 176, "Enrich", "site, region, segment")}
+    ${a(176, 226, 200, 226)}
+    ${b(204, 200, 186, "Correlate", "11 rules, 2 entry points")}
+    ${a(390, 226, 414, 226)}
+    ${b(418, 200, 166, "Incident", "one fault, many cells")}
+    ${a(584, 226, 608, 226)}
+    ${b(612, 200, 176, "Diagnose", "rules, then a model", 1)}
+    ${a(788, 226, 812, 226)}
+    ${b(816, 200, 144, "Prioritise", "weighted rule")}
+    ${a(888, 252, 888, 280)}
+    ${b(730, 286, 230, "Human approval", "the only path to a customer")}
+    ${a(730, 312, 706, 312)}
+    ${b(480, 286, 220, "Notify and report", "approved template, digest")}
+    <rect x="0" y="286" width="420" height="52" rx="7" fill="var(--raised)"
+      stroke="var(--line)" stroke-width="1.4" stroke-dasharray="5 4"/>
+    <text x="210" y="308" text-anchor="middle" font-size="12.5" font-weight="600"
+      fill="var(--muted)">Every step writes an audit row</text>
+    <text x="210" y="324" text-anchor="middle" font-size="10.5" fill="var(--muted)">
+      actor, inputs, rule version, evidence</text>
+    <text x="0" y="372" font-size="11" fill="var(--muted)">
+      Network first: a degradation raises an incident whether or not anybody complained.</text>
+    <text x="0" y="390" font-size="11" fill="var(--muted)">
+      Customer first: a located complaint joins the incident covering its event time.</text>
+  </svg>`;
+}
+
+function dLayers() {
+  const rows = [
+    ["Interface", "Next.js console, 15 FastAPI routers, 58 routes. Every request re-checks authorisation server side"],
+    ["Infrastructure", "Adapters: Oracle, LLM gateway, Teams, SMS. Each has a mock and a live stub"],
+    ["AI", "One model gateway, three agents, the ML registry. No other component may hold an HTTP client to a model"],
+    ["Modules", "16 business modules that never import one another. They share ports and events only"],
+    ["Core", "Settings, clock, security, errors, audit. The only place that reads the environment"],
+    ["Domain", "24 events, 16 lifecycle states. Pure: no database, no HTTP, no framework, no clock"],
+  ];
+  return `<svg viewBox="0 0 960 ${rows.length * 54 + 30}" role="img"
+    aria-label="Six layers with dependencies pointing inward from the interface to a pure domain">
+    <defs><marker id="dn" viewBox="0 0 10 10" refX="5" refY="9" markerWidth="5" markerHeight="5"
+      orient="auto"><path d="M0 0 L10 0 L5 10 z" fill="var(--line-strong)"/></marker></defs>
+    ${rows.map(([t, s], k) => {
+      const y = k * 54, hl = t === "AI";
+      return `<rect x="32" y="${y}" width="928" height="46" rx="7"
+        fill="${hl ? "var(--brand-soft)" : "var(--surface)"}"
+        stroke="${hl ? "var(--brand)" : "var(--line-strong)"}" stroke-width="1.4"/>
+        <text x="46" y="${y + 20}" font-size="12.5" font-weight="700" fill="var(--ink)">${t}</text>
+        <text x="46" y="${y + 36}" font-size="10.5" fill="var(--muted)">${s}</text>`;
+    }).join("")}
+    <line x1="12" y1="6" x2="12" y2="${rows.length * 54 - 14}" stroke="var(--line-strong)"
+      stroke-width="1.6" marker-end="url(#dn)"/>
+    <text x="0" y="${rows.length * 54 + 22}" font-size="10.5" font-weight="600"
+      fill="var(--muted)">dependencies point inward</text>
+  </svg>`;
+}
+
+function dGate() {
+  const b = (x, y, w, t, s, tone) => `
+    <rect x="${x}" y="${y}" width="${w}" height="50" rx="7"
+      fill="${tone || "var(--surface)"}" stroke="var(--line-strong)" stroke-width="1.4"/>
+    <text x="${x + w / 2}" y="${y + 21}" text-anchor="middle" font-size="12.5"
+      font-weight="600" fill="var(--ink)">${t}</text>
+    <text x="${x + w / 2}" y="${y + 37}" text-anchor="middle" font-size="10.5"
+      fill="var(--muted)">${s}</text>`;
+  return `<svg viewBox="0 0 960 230" role="img"
+    aria-label="The rules run first and above the certainty floor the model is never called">
+    <defs><marker id="g" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="5" markerHeight="5"
+      orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="var(--line-strong)"/></marker></defs>
+    ${b(0, 90, 160, "Incident", "with its evidence")}
+    <line x1="160" y1="115" x2="188" y2="115" stroke="var(--line-strong)" stroke-width="1.6" marker-end="url(#g)"/>
+    ${b(192, 90, 196, "Deterministic rules", "ordered by conclusiveness")}
+    <line x1="388" y1="104" x2="446" y2="56" stroke="var(--ok)" stroke-width="1.8" marker-end="url(#g)"/>
+    <text x="392" y="76" font-size="11" font-weight="700" fill="var(--ok)">confident</text>
+    ${b(450, 26, 250, "Answered, no model called", "free, instant, cannot hallucinate", "var(--ok-soft)")}
+    <line x1="700" y1="51" x2="728" y2="51" stroke="var(--line-strong)" stroke-width="1.6" marker-end="url(#g)"/>
+    ${b(732, 26, 228, "Recorded as method", "rules or llm, on every decision", "var(--raised)")}
+    <line x1="388" y1="126" x2="446" y2="174" stroke="var(--brand)" stroke-width="1.8" marker-end="url(#g)"/>
+    <text x="392" y="168" font-size="11" font-weight="700" fill="var(--brand)">not sure</text>
+    ${b(450, 150, 250, "Bounded agent and model", "typed tools, steps, budget", "var(--brand-soft)")}
+    <line x1="700" y1="175" x2="728" y2="175" stroke="var(--line-strong)" stroke-width="1.6" marker-end="url(#g)"/>
+    ${b(732, 150, 228, "Schema and citation check", "invalid, repair, then the rules", "var(--raised)")}
+  </svg>`;
+}
+
+function pArch() {
+  return `
+  <div class="pagehead">
+    <div><h1>Architecture</h1><p>How the pieces fit together, and why these algorithms</p></div>
+  </div>
+
+  <section class="card arch" style="margin-bottom:16px">
+    <h2>End to end flow</h2>
+    <figure>${dFlow()}
+      <figcaption>The shaded box is the only step where a language model is involved. The
+        human approval gate is the only path to a customer. Domain events are written in the
+        same database transaction as the state change, then dispatched by a separate worker,
+        so a crash loses nothing and any incident can be replayed.</figcaption></figure>
+  </section>
+
+  <section class="card arch" style="margin-bottom:16px">
+    <h2>Layering</h2>
+    <figure>${dLayers()}
+      <figcaption>Dependencies point inward. The domain knows nothing about databases, HTTP
+        or frameworks, which is why its logic is testable without any of them. Five automated
+        contracts enforce this on every commit, and the modules are independent by contract,
+        so none may import another.</figcaption></figure>
+    <p>Shape: a modular monolith, API first, event driven internally, ports and adapters.
+      One deployable unit so it is simple to run, strict seams so any piece can be lifted out
+      later. Python 3.12, FastAPI, SQLAlchemy 2, Oracle. Next.js and TypeScript on the front.</p>
+  </section>
+
+  <section class="card arch" style="margin-bottom:16px">
+    <h2>Correlation, the heart of it</h2>
+    <p>One engine, two entry points. <strong>Network first</strong> scans KPI health,
+      collapses alarm storms, walks the topology and raises incidents whether or not anybody
+      complained. <strong>Customer first</strong> attaches a located complaint to the incident
+      covering its event time, or starts one with enough corroboration.</p>
+    <div class="scroll"><table><caption>The eleven rules, and why each exists</caption>
+      <thead><tr><th class="n" style="width:4%">#</th><th style="width:24%">Rule</th>
+        <th>Why</th></tr></thead>
+      <tbody>${[
+        ["Spatio-temporal clustering","Complaints close in space and time are one event, normalised by the cell's subscriber estimate so a busy cell must shout louder than a rural one."],
+        ["Topology-aware joining","Degradation on cells sharing an upstream element is one incident rooted at that element. The difference between nine broken sites and one broken link."],
+        ["Maintenance suppression","An approved window on the element or any ancestor means this was expected. Suppression is recorded, never silent."],
+        ["Alarm-storm collapsing","Alarms on related elements inside the collapse window are links on one incident, not N incidents."],
+        ["Flapping","Enough raise and clear transitions in an hour with no KPI impact is a hardware nuisance, not a customer incident."],
+        ["False-alarm rejection","An alarm with healthy KPIs and nobody complaining is rejected. Silence plus health means nothing is wrong."],
+        ["Non-network rejection","A billing surge is never a network incident, however big."],
+        ["Silent sufferers","KPI degradation past the threshold raises an incident with zero complaints."],
+        ["Silence as signal","A complaint rate that collapses against the cell's own baseline while KPIs collapse is evidence of an outage, not of health."],
+        ["Duplicate storms","Complaints sharing a dedupe key count once."],
+        ["Late events","Event time decides the window. A complaint may attach to a closed incident, returning a reopen signal rather than a second incident."],
+      ].map(([r, w], k) => `<tr><td class="n muted">${k + 1}</td><td><strong>${r}</strong></td>
+        <td>${w}</td></tr>`).join("")}</tbody></table></div>
+    <div class="note i">Two of these are the ones nobody expects. <strong>Silent sufferers</strong>
+      raises an incident from KPI degradation with no complaints at all. <strong>Silence as
+      signal</strong> reads a collapsing complaint rate as evidence of an outage so complete
+      it silenced the channel. A complaints-only system is blind to both.</div>
+  </section>
+
+  <section class="card arch" style="margin-bottom:16px">
+    <h2>Where the AI sits</h2>
+    <figure>${dGate()}
+      <figcaption>The rules are consulted first and above the certainty floor the model is
+        never called, which is also what makes the model's contribution measurable: every
+        decision records which path answered.</figcaption></figure>
+    <p><strong>AI recommends, rules decide, humans approve.</strong> No language model
+      executes a runbook, writes a network command, sends a customer message or sees a raw
+      phone number. Models fill slots in approved templates, they do not write free text to
+      customers. All model traffic goes through a single gateway that owns redaction,
+      timeouts, retries, a circuit breaker, caching, token accounting and prompt versioning.
+      A source level test enforces that no other component can reach a model endpoint.</p>
+    <p>Three agents, each bounded by steps, tool calls, tokens and wall clock, each with a
+      permission ceiling and a deterministic fallback: DiagnosisAgent, KnowledgeAssistant,
+      Reporter.</p>
+  </section>
+
+  <section class="card arch" style="margin-bottom:16px">
+    <h2>Algorithms, and the alternative each was chosen over</h2>
+    <div class="scroll"><table><caption>Modelling choices</caption>
+      <thead><tr><th style="width:16%">Decision</th><th style="width:24%">Chosen</th>
+        <th>Why, and over what</th></tr></thead>
+      <tbody>
+      <tr><td><strong>Grouping</strong></td><td>Rule based clustering over place, time and
+        symptom, joined through the topology</td>
+        <td>Over a learned clustering model. An engineer has to defend the grouping at 3am.
+          "They share an upstream node and the alarm is on that node" is a sentence pointing
+          at a row. A distance metric is not. The rules also score 1.00 precision and 1.00
+          recall on the labelled scenarios, so there is nothing to beat.</td></tr>
+      <tr><td><strong>Diagnosis</strong></td><td>Rules first, model only for the ambiguous
+        remainder</td>
+        <td>Over a model first pipeline. A rule that is certain is a better answer than a
+          model that agrees with it: explainable, free, instant, and it cannot be talked into
+          a different answer by the wording of a complaint. Rules alone get 7 of 7.</td></tr>
+      <tr><td><strong>Priority</strong></td><td>Transparent weighted rule storing each
+        factor's contribution</td>
+        <td>Over a trained ranker. A P1 has to be defensible months later in a disagreement.
+          "Subscribers contributed 0.4, SLA risk 0.3" is a conversation. A ranker's score is
+          not.</td></tr>
+      <tr><td><strong>Anomalies</strong></td><td>Robust z-score against each cell's own hour
+        of week baseline, using the median</td>
+        <td>Over a fixed threshold, which cannot tell a cell that is always busy at 8pm from
+          one that has just broken. And over mean with standard deviation, because one
+          catastrophic hour drags both, so the fault inflates the baseline it should be
+          measured against.</td></tr>
+      <tr><td><strong>Forecast</strong></td><td>Gradient boosting with a Poisson objective,
+        at region-hour grain</td>
+        <td>Over deep learning: the data is tabular and modest, boosting is stronger on that
+          shape and stays attributable through SHAP. Over absolute error: that produced a
+          model which predicted a constant zero and still beat the baseline by 40%, because
+          the target is 97.6% zeros at cell grain. Poisson cannot collapse that way.</td></tr>
+      <tr><td><strong>Complaint text</strong></td><td>Deterministic multilingual lexicon,
+        English, Swahili, Sheng, code switched</td>
+        <td>Over a trained classifier or an LLM as the primary path. Inspectable, instant,
+          free, and its accuracy is known: 69.1% exact, 76.2% network versus not, with 30%
+          routed to a human. The LLM path exists behind it for the remainder.</td></tr>
+      <tr><td><strong>Text to SQL</strong></td><td>The model writes SQL, a human reads it,
+        the existing guard executes it</td>
+        <td>Over letting the model query directly. The dangerous failure is not a destructive
+          statement, the schema and guard stop those. It is a query that is valid, permitted
+          and subtly wrong.</td></tr>
+      <tr><td><strong>Retrieval</strong></td><td>Keyword search with expiry filtering and
+        mandatory citations</td>
+        <td>Over a vector index and reranker, which is machinery without a problem at a few
+          dozen documents. What makes an answer safe is citation integrity: an answer citing
+          a document never retrieved is rejected, expired procedures are never returned, and
+          no retrieval means no answer.</td></tr>
+      <tr><td><strong>Built, switched off</strong></td><td>A spatio-temporal GNN and a
+        contextual bandit</td>
+        <td>The GNN would trade an explainable grouping for an embedding, and the rules
+          already score 1.00, so there is nothing to beat. The bandit learns by exploring,
+          which here means messaging real customers at worse times on purpose. That is a
+          consent conversation before it is an engineering task.</td></tr>
+      </tbody></table></div>
+  </section>
+
+  <section class="card arch" style="margin-bottom:16px">
+    <h2>Security, nine layers</h2>
+    <ul>
+      <li><strong>Input validation</strong> at every boundary, typed schemas, bounds, allowlists.</li>
+      <li><strong>Prompt injection guard</strong>: customer text is data, never instruction. Delimited, pattern checked, with a canary token that detects a leaked system prompt.</li>
+      <li><strong>Rate limiting</strong> per user, per agent, per tool and per model call.</li>
+      <li><strong>Typed tool registry</strong> with permission tiers, timeouts and budgets.</li>
+      <li><strong>SQL guard</strong>: syntax tree parsing, table allowlist, mandatory row cap and timeout.</li>
+      <li><strong>Identifier masking</strong> before the model, the logs, Teams and any export.</li>
+      <li><strong>Output sanitisation</strong>: scripts stripped, identifier and canary leakage detected, length capped.</li>
+      <li><strong>Append only audit</strong> of every decision and AI output, with actor, inputs, rule or prompt version, confidence and evidence.</li>
+      <li><strong>Human oversight</strong>: AI recommends, rules decide, humans approve. No AI side effects.</li>
+    </ul>
+    <p>Alongside these: role based access re-checked server side on every request across 21
+      capabilities and 5 roles, object level checks so one user cannot read another's record
+      by changing an identifier, CORS allowlist and security headers from configuration,
+      secrets only in the environment with an automated scan in the commit hook and the
+      build, non root containers, pinned dependency locks, vulnerability audits, an SBOM and
+      a written threat model.</p>
+  </section>
+
+  <section class="card arch">
+    <h2>What it would take to run this on real data</h2>
+    <p><strong>Connect ten read only feeds.</strong> Sites and cells from the planning tool,
+      topology from NMS inventory, alarms from fault management, hourly KPIs from performance
+      management, planned maintenance from change management, subscribers from HLR and CBS,
+      complaints and care calls from CRM. Real table names live in one configuration file
+      validated at startup, so this is a configuration edit rather than a code change, and
+      the application never writes back to a system of record.</p>
+    <p><strong>Three privacy procedures before any real subscriber record.</strong> Erasure
+      that cascades from the token to everything derived from it, a policy for what happens to
+      historical reporting when the pseudonymisation salt rotates, and a minimum group size
+      below which a single cell is not reported on its own. Days of work each, but they are
+      obligations under the Kenya Data Protection Act rather than nice to have.</p>
+    <p><strong>Two operational pieces.</strong> A provisioned Teams webhook so the digest can
+      actually be delivered, and an internal model endpoint so the AI thresholds can be
+      measured against the real thing instead of a deterministic stand in.</p>
+    <div class="note i"><strong>Then predictive maintenance.</strong> Today the system detects
+      a fault early. Predicting one needs telemetry we do not ingest yet. Start with the site
+      power feed: track each battery's discharge curve against its own history and flag it
+      hours before the site goes dark. One source, and the existing hour of week baseline
+      transfers to it directly. Optical error counters and per sector handover rates follow
+      the same method for backhaul wear and antenna misalignment.</div>
+  </section>`;
+}
+
+/* ---------------------------------------------------------------- router */
+
+const PAGES = [
+  ["home","Command Center",pHome],["incident","Incident",pIncident],
+  ["complaints","Complaints",pComplaints],["care","Care lookup",pCare],
+  ["explorer","Data Explorer",pExplorer],["insights","Insights",pInsights],
+  ["reports","Reports",pReports],["ai","AI quality",pAi],
+  ["arch","Architecture",pArch],
 ];
 
-/* ------------------------------------------------------------ rendering */
-
-let tab = "why";
-let step = 0;
-
-function stageHTML() {
-  const s = STEPS[step];
-  return `
-    <div class="num">${s.n} of ${STEPS.length}</div>
-    <h3>${s.h}</h3>
-    <p class="what">${s.what}</p>
-    <p class="how">${s.how}</p>
-    <div class="pill">${s.pill}</div>
-    <div class="navrow">
-      <button class="btn ghost" id="prev" ${step === 0 ? "disabled" : ""}>Back</button>
-      <button class="btn" id="next" ${step === STEPS.length - 1 ? "disabled" : ""}>Next step</button>
-    </div>`;
-}
-
 function draw() {
-  document.getElementById("nav").innerHTML = TABS.map(([id, label]) =>
-    `<button type="button" data-tab="${id}"${id === tab ? ' aria-current="page"' : ""}>${label}</button>`
-  ).join("");
-  document.getElementById("main").innerHTML = VIEWS[tab]();
+  document.getElementById("nav").innerHTML = PAGES
+    .filter(([id]) => id !== "incident")
+    .map(([id, label]) => `<button type="button" data-p="${id}"${
+      id === S.page || (S.page === "incident" && id === "home") ? ' aria-current="page"' : ""
+    }>${label}</button>`).join("");
+  const page = PAGES.find(([id]) => id === S.page) || PAGES[0];
+  document.getElementById("main").innerHTML = page[2]();
 }
 
-function drawStage() {
-  document.getElementById("stage").innerHTML = stageHTML();
-  document.querySelectorAll("[data-step]").forEach((b) => {
-    b.setAttribute("aria-pressed", String(Number(b.dataset.step) === step));
-  });
-}
+function go(id) { S.page = id; draw(); window.scrollTo(0, 0); }
 
 document.addEventListener("click", (e) => {
   const t = e.target;
+  const nav = t.closest("[data-p]"); if (nav) return go(nav.dataset.p);
+  const gt = t.closest("[data-go]"); if (gt) { e.preventDefault(); return go(gt.dataset.go); }
+  const row = t.closest("[data-inc]");
+  if (row) { S.inc = row.dataset.inc; S.diagnosed = false; return go("incident"); }
+  const lag = t.closest("[data-lag]"); if (lag) { S.lag = Number(lag.dataset.lag); return draw(); }
 
-  const tb = t.closest("[data-tab]");
-  if (tb) { tab = tb.dataset.tab; draw(); window.scrollTo(0, 0); return; }
-
-  const st = t.closest("[data-step]");
-  if (st) { step = Number(st.dataset.step); drawStage(); return; }
-
-  if (t.id === "next" && step < STEPS.length - 1) { step++; drawStage(); return; }
-  if (t.id === "prev" && step > 0) { step--; drawStage(); }
+  if (t.id === "theme") {
+    const r = document.documentElement;
+    r.setAttribute("data-theme", r.getAttribute("data-theme") === "dark" ? "light" : "dark");
+    return;
+  }
+  if (t.id === "diagnose") {
+    t.disabled = true; t.textContent = "Running…";
+    setTimeout(() => { S.diagnosed = true; draw(); }, 420);
+    return;
+  }
+  if (t.id === "sample") { S.sql = SQL.gen; S.ran = null; draw(); return; }
+  if (t.id === "danger") { S.sql = "DELETE FROM complaint WHERE received_at > SYSDATE - 7"; S.ran = null; draw(); return; }
+  if (t.id === "run") {
+    const box = document.getElementById("sqlbox");
+    S.sql = box ? box.value : ""; S.ran = S.sql; return draw();
+  }
+  if (t.id === "copy") {
+    const el = document.getElementById("copied");
+    if (el) { el.textContent = "Copied"; setTimeout(() => { el.textContent = ""; }, 2200); }
+  }
 });
 
+document.addEventListener("input", (e) => { if (e.target.id === "sqlbox") S.sql = e.target.value; });
 document.addEventListener("keydown", (e) => {
-  if (tab !== "how") return;
-  if (e.key === "ArrowRight" && step < STEPS.length - 1) { step++; drawStage(); }
-  if (e.key === "ArrowLeft" && step > 0) { step--; drawStage(); }
+  if (e.key !== "Enter" && e.key !== " ") return;
+  const row = e.target.closest && e.target.closest("[data-inc]");
+  if (row) { e.preventDefault(); S.inc = row.dataset.inc; S.diagnosed = false; go("incident"); }
 });
 
+document.documentElement.setAttribute("data-theme",
+  window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
 draw();
 </script>
 </body>
