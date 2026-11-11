@@ -149,6 +149,111 @@ a different problem, not the same one with a bigger number.
 
 ---
 
+## Predictive maintenance
+
+The single largest opportunity, and the one most often misdescribed. Worth stating the
+distinction precisely, because it is where this conversation usually goes wrong.
+
+TAZAMA today catches a degradation from KPIs and alarms and connects it to customer impact.
+That is **early detection**: the fault has already begun. **Predicting** a failure before it
+starts needs telemetry describing a component *wearing out*, and those streams are not in
+the KPI feed the product currently reads.
+
+What already exists and would carry this: the per-cell hour-of-week anomaly baseline (§4 of
+`architecture/algorithm-choices.md`), the topology and failure-domain model, and the impact
+calculation that can quantify what a predicted failure *would* cost. The method is the same
+in every case below — establish what normal looks like for that specific component, then
+flag departure from it. What is missing is the telemetry, which makes this a data-access
+conversation with the network team rather than a modelling problem.
+
+Ordered by how easily each could be added.
+
+### 15. Power and generator degradation
+
+*Today:* mains power cuts, the backup battery drains faster than anyone expected, and the
+site goes dark with no warning.
+
+*With this:* track the voltage discharge curve and fuel-level telemetry per site. When a
+battery is draining faster than its own historical curve for that load, raise a
+battery-health warning hours ahead of the outage, so a field crew refuels or swaps the unit
+before customers are affected.
+
+*Unblocked by:* a site power and environment feed — rectifier voltage, battery discharge,
+fuel level, door and temperature alarms. **Start here.** It is a single source, the existing
+robust z-score transfers directly (a discharge curve is exactly the shape it handles well),
+and the payoff is the easiest of the three to verify: the site either went dark or it did
+not.
+
+### 16. Optical backhaul degradation
+
+*Today:* transceivers accumulate heat, dust and micro-bends over weeks until the link fails
+outright, taking every cell beneath it down at once.
+
+*With this:* ingest bit error rate and frame-error counters per link. When errors climb above
+that link's own weekly baseline, flag transceiver wear days before failure — a planned swap
+in a maintenance window instead of an emergency at 2am.
+
+*Unblocked by:* transport-layer counters, which usually live in a different system from the
+radio KPIs. This fits the architecture well: `topology_edge` already models which cells share
+a failure domain, so a degrading link maps onto the cells it would take down and the impact
+of a *predicted* failure can be costed before it happens.
+
+### 17. Antenna tilt and RF misalignment
+
+*Today:* wind or a structural shift tilts an antenna, coverage shrinks, adjacent cells absorb
+the load, and the first clear signal is a rise in complaints.
+
+*With this:* watch handover success rate and signal quality per sector. A sustained one-sided
+drop on a single sector, while its neighbours are unchanged, points at physical misalignment
+— identifying it without sending somebody to climb the tower first.
+
+*Unblocked by:* per-sector handover and signal-quality KPIs with neighbour relations, plus a
+longer history than the current 336-hour window. This is the hardest of the three to make
+trustworthy, because slow drift is easy to confuse with a changing traffic pattern. The
+honest way to build it is to start by *measuring* how often the pattern precedes a confirmed
+tilt, and to ship nothing until that number exists.
+
+### 18. Survival analysis, once there is failure history
+
+The natural fit for all three above: estimating a component's remaining life rather than
+flagging an anomaly in it. Not implementable today at all — it needs a history of actual
+failures with timestamps and the replacement record for each, which lives in maintenance
+systems rather than KPI feeds.
+
+*Unblocked by:* access to the maintenance and field-work history. Worth asking for at the
+same time as the power feed, because the value of §15 goes up sharply once a warning can be
+scored against what actually happened.
+
+---
+
+## Complaint understanding, beyond the lexicon
+
+### 19. Topic modelling (LDA or LSA) for category discovery
+
+The lexicon can only find categories somebody thought of in advance. Topic modelling over a
+month of real complaints would surface clusters nobody anticipated — a handset model, a
+tariff change, a specific app.
+
+The honest framing: this is **exploratory, not operational**. Topics are unlabelled and
+drift, so a person reads and names them, and the output is *new categories to add to the
+lexicon* rather than a live classifier. It also needs real text in volume: synthetic
+complaints are generated from templates, so topic modelling on the seed would only
+rediscover those templates.
+
+*Unblocked by:* a month of real complaint text.
+
+### 20. Sentence embeddings for complaint similarity
+
+Grouping complaints that mean the same thing in different words, across English, Swahili and
+Sheng, without maintaining phrase lists. Costs the inspectability the lexicon has, and needs
+a multilingual model that genuinely handles Sheng.
+
+*Unblocked by:* nothing — this is measurable today against the lexicon's own labels, which
+makes it a cheap experiment rather than a leap. It earns its place only if it beats 69.1%
+exact / 76.2% binary on held-out complaints.
+
+---
+
 ## Explicitly not planned
 
 | | Why not |

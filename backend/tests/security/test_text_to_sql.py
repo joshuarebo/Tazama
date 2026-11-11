@@ -285,7 +285,10 @@ def test_suggesting_requires_the_same_capability_as_running(client, auth_headers
         # real deployment that URL is LLM_BASE_URL — which may carry credentials.
         (
             "probe failed: ConnectError: [Errno 111] Connection refused "
-            "while requesting http://svc:s3cr3t@models.internal:8088/v1/models",
+            # The fake credential below is the point of the test: it asserts the value
+            # never reaches a client.
+            "while requesting "
+            "http://svc:s3cr3t@models.internal:8088/v1/models",  # pragma: allowlist secret
             "unreachable: cannot connect",
         ),
         (
