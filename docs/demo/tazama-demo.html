@@ -1,0 +1,1840 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TAZAMA Demo</title>
+<style>
+/* ============================================================== tokens */
+:root{
+  /* neutrals */
+  --c0:#ffffff; --c1:#f7f8fa; --c2:#eef1f4; --c3:#e2e6eb; --c4:#cbd2da;
+  --t1:#10151b; --t2:#465361; --t3:#737f8c;
+  /* accent + semantics */
+  --a:#0d6e68; --a-ink:#ffffff; --a-bg:#e4f2f0; --a-line:#9fcfca;
+  --ok:#16653c; --ok-bg:#e5f3ea;
+  --wn:#875200; --wn-bg:#fcf1dc;
+  --bd:#9b2520; --bd-bg:#fbe8e6;
+  --in:#1d4f94; --in-bg:#e7eefb;
+  /* type scale (1.22) */
+  --f0:11.5px; --f1:12.5px; --f2:13.5px; --f3:15px; --f4:17px;
+  --f5:20px; --f6:25px; --f7:31px; --f8:38px;
+  /* space scale */
+  --s1:4px; --s2:8px; --s3:12px; --s4:16px; --s5:24px; --s6:32px; --s7:48px; --s8:64px;
+  --r1:6px; --r2:10px; --r3:16px;
+  --sh:0 1px 2px rgba(15,22,30,.05), 0 2px 8px rgba(15,22,30,.04);
+  --sh2:0 2px 6px rgba(15,22,30,.07), 0 12px 32px rgba(15,22,30,.07);
+  --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace;
+  --sans:system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  --ease:cubic-bezier(.22,.61,.36,1);
+  --dur:200ms;
+}
+html[data-theme="dark"]{
+  --c0:#121820; --c1:#0d1218; --c2:#1b232c; --c3:#2a343f; --c4:#3c4854;
+  --t1:#eaeff4; --t2:#a7b4c0; --t3:#7d8b98;
+  --a:#4cbdb3; --a-ink:#04231f; --a-bg:#0f3330; --a-line:#1d534d;
+  --ok:#72d49a; --ok-bg:#103022; --wn:#e3b669; --wn-bg:#32270f;
+  --bd:#f3938c; --bd-bg:#351716; --in:#8fb8f2; --in-bg:#13233d;
+  --sh:0 1px 2px rgba(0,0,0,.5), 0 2px 8px rgba(0,0,0,.35);
+  --sh2:0 2px 6px rgba(0,0,0,.5), 0 12px 32px rgba(0,0,0,.45);
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0;height:100%}
+body{background:var(--c1);color:var(--t1);font:var(--f3)/1.55 var(--sans);
+  -webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
+h1,h2,h3,h4{margin:0;line-height:1.2;letter-spacing:-.016em;font-weight:660}
+p{margin:0}
+a{color:var(--a);text-underline-offset:2px}
+code,pre,.mono{font-family:var(--mono);font-variant-ligatures:none}
+::selection{background:var(--a-bg);color:var(--t1)}
+
+/* ========================================================== app frame */
+.ribbon{background:var(--wn-bg);color:var(--wn);font-size:var(--f0);font-weight:640;
+  text-align:center;padding:6px 16px;letter-spacing:.012em;border-bottom:1px solid var(--c3)}
+.app{display:grid;grid-template-columns:238px 1fr;min-height:calc(100% - 28px);
+  /* The sidebar is sticky and one viewport tall, so paint its column on the grid
+     itself — otherwise the rail visibly stops partway down a long page. */
+  background:linear-gradient(90deg,var(--c0) 0 237px,var(--c3) 237px 238px,var(--c1) 238px)}
+
+aside{background:var(--c0);border-right:1px solid var(--c3);display:flex;flex-direction:column;
+  position:sticky;top:0;height:100vh;overflow-y:auto}
+.brand{padding:var(--s5) var(--s4) var(--s4);border-bottom:1px solid var(--c3)}
+.brand b{display:block;font-size:var(--f5);font-weight:800;letter-spacing:.16em}
+.brand span{display:block;font-size:var(--f1);color:var(--t3);margin-top:2px}
+.brand em{display:block;font-size:10.5px;color:var(--t3);font-style:normal;margin-top:5px;opacity:.8}
+
+nav{padding:var(--s3) var(--s2);flex:1}
+nav .grp{font-size:10.5px;font-weight:700;letter-spacing:.09em;color:var(--t3);
+  padding:var(--s4) var(--s3) var(--s2);text-transform:uppercase}
+nav button{display:flex;align-items:center;gap:9px;width:100%;text-align:left;background:none;
+  border:0;border-radius:var(--r1);color:var(--t2);font:inherit;font-size:var(--f2);
+  padding:7px var(--s3);cursor:pointer;transition:background var(--dur) var(--ease),color var(--dur) var(--ease)}
+nav button:hover{background:var(--c2);color:var(--t1)}
+nav button[aria-current="page"]{background:var(--a-bg);color:var(--a);font-weight:650}
+nav button .dot{width:5px;height:5px;border-radius:50%;background:currentColor;opacity:0;
+  transition:opacity var(--dur) var(--ease)}
+nav button[aria-current="page"] .dot{opacity:1}
+
+.asidefoot{padding:var(--s3) var(--s4) var(--s5);border-top:1px solid var(--c3);display:grid;gap:var(--s2)}
+.asidefoot label{font-size:10.5px;font-weight:700;letter-spacing:.07em;color:var(--t3);text-transform:uppercase}
+
+main{min-width:0;padding:var(--s7) var(--s7) var(--s8);max-width:1180px}
+@media (max-width:980px){
+  .app{grid-template-columns:1fr;background:none}
+  aside{position:static;height:auto;border-right:0;border-bottom:1px solid var(--c3)}
+  nav{display:flex;flex-wrap:wrap;gap:2px;padding:var(--s2)}
+  nav .grp{display:none}
+  nav button{width:auto}
+  main{padding:var(--s5) var(--s4) var(--s7)}
+}
+
+/* ============================================================ controls */
+select,.btn{font:inherit;font-size:var(--f2);color:var(--t1);background:var(--c0);
+  border:1px solid var(--c4);border-radius:var(--r1);padding:6px 11px;cursor:pointer;
+  transition:border-color var(--dur) var(--ease),background var(--dur) var(--ease),transform 90ms var(--ease)}
+.btn:hover{border-color:var(--a);background:var(--c1)}
+.btn:active{transform:translateY(1px)}
+.btn.pri{background:var(--a);border-color:var(--a);color:var(--a-ink);font-weight:620}
+.btn.pri:hover{filter:brightness(1.09);background:var(--a)}
+.btn.sm{font-size:var(--f1);padding:4px 9px}
+.btn[aria-pressed="true"]{background:var(--a-bg);border-color:var(--a-line);color:var(--a);font-weight:640}
+.btn:disabled{opacity:.55;cursor:default;transform:none}
+:focus-visible{outline:2px solid var(--a);outline-offset:2px;border-radius:3px}
+input[type=text],textarea{font:inherit;width:100%;background:var(--c0);color:var(--t1);
+  border:1px solid var(--c4);border-radius:var(--r1);padding:9px 11px}
+textarea{font-family:var(--mono);font-size:var(--f1);min-height:92px;resize:vertical;line-height:1.5}
+
+/* =============================================================== page */
+.hero{margin-bottom:var(--s6)}
+.eyebrow{font-size:var(--f0);font-weight:700;letter-spacing:.09em;text-transform:uppercase;
+  color:var(--a);margin-bottom:var(--s2)}
+.hero h1{font-size:var(--f7);letter-spacing:-.024em}
+.hero .sub{margin-top:var(--s3);color:var(--t2);font-size:var(--f4);max-width:68ch;line-height:1.5}
+
+section.blk{margin-bottom:var(--s7)}
+section.blk>h2{font-size:var(--f5);margin-bottom:var(--s2)}
+section.blk>.lede{color:var(--t2);font-size:var(--f2);margin-bottom:var(--s4);max-width:76ch}
+
+.panel{background:var(--c0);border:1px solid var(--c3);border-radius:var(--r3);padding:var(--s5);
+  box-shadow:var(--sh)}
+.panel.flat{box-shadow:none;background:transparent;border:0;padding:0}
+.panel+.panel{margin-top:var(--s4)}
+
+.cols{display:grid;gap:var(--s4)}
+.c2{grid-template-columns:repeat(auto-fit,minmax(300px,1fr))}
+.c3{grid-template-columns:repeat(auto-fit,minmax(210px,1fr))}
+.c4{grid-template-columns:repeat(auto-fit,minmax(165px,1fr))}
+
+/* metric: the one place numbers get to be loud */
+.met{padding:var(--s4) 0}
+.met .k{font-size:var(--f0);font-weight:680;letter-spacing:.07em;text-transform:uppercase;color:var(--t3)}
+.met .v{font-size:var(--f8);font-weight:720;letter-spacing:-.035em;line-height:1.05;margin-top:6px;
+  font-variant-numeric:tabular-nums}
+.met .v.sm{font-size:var(--f6)}
+.met .n{font-size:var(--f1);color:var(--t3);margin-top:5px;line-height:1.4}
+.metrow{display:grid;gap:var(--s4) var(--s6);border-top:1px solid var(--c3);
+  grid-template-columns:repeat(auto-fit,minmax(150px,1fr))}
+
+/* ============================================================= tables */
+table{width:100%;border-collapse:collapse;font-size:var(--f2)}
+caption{text-align:left;font-size:var(--f1);color:var(--t3);padding-bottom:var(--s2)}
+th,td{text-align:left;padding:9px 12px 9px 0;border-bottom:1px solid var(--c3);vertical-align:top}
+th{font-size:10.5px;text-transform:uppercase;letter-spacing:.07em;color:var(--t3);font-weight:700;
+  padding-bottom:7px}
+tbody tr:last-child td{border-bottom:0}
+td.num,th.num{text-align:right;font-variant-numeric:tabular-nums;padding-right:0}
+tr.pick{cursor:pointer;transition:background 140ms var(--ease)}
+tr.pick:hover td{background:var(--c1)}
+tr.pick[aria-selected="true"] td{background:var(--a-bg)}
+.scroll{overflow-x:auto;-webkit-overflow-scrolling:touch}
+
+/* ============================================================== atoms */
+.tag{display:inline-block;font-size:10.5px;font-weight:680;padding:2px 8px;border-radius:999px;
+  white-space:nowrap;letter-spacing:.015em}
+.tag.ok{background:var(--ok-bg);color:var(--ok)}
+.tag.wn{background:var(--wn-bg);color:var(--wn)}
+.tag.bd{background:var(--bd-bg);color:var(--bd)}
+.tag.in{background:var(--in-bg);color:var(--in)}
+.tag.mu{background:var(--c2);color:var(--t2)}
+.tag.ac{background:var(--a-bg);color:var(--a)}
+
+.msg{border-radius:var(--r2);padding:var(--s3) var(--s4);font-size:var(--f2);line-height:1.55;
+  border-left:3px solid var(--c4);background:var(--c1);color:var(--t2);margin-top:var(--s4)}
+.msg.ok{border-color:var(--ok);background:var(--ok-bg);color:var(--ok)}
+.msg.wn{border-color:var(--wn);background:var(--wn-bg);color:var(--wn)}
+.msg.in{border-color:var(--in);background:var(--in-bg);color:var(--in)}
+.msg strong{color:inherit}
+.msg ul{margin:var(--s2) 0 0;padding-left:18px}
+.msg li{margin:3px 0}
+
+pre.code{background:var(--c1);border:1px solid var(--c3);border-radius:var(--r2);
+  padding:var(--s3) var(--s4);font-size:var(--f1);line-height:1.6;overflow-x:auto;margin:0;
+  white-space:pre-wrap;word-break:break-word;color:var(--t1)}
+
+details.disc{border-top:1px solid var(--c3);padding-top:var(--s3);margin-top:var(--s4)}
+details.disc>summary{cursor:pointer;font-weight:640;font-size:var(--f2);list-style:none;
+  display:flex;align-items:center;gap:7px;color:var(--t2)}
+details.disc>summary::-webkit-details-marker{display:none}
+details.disc>summary::before{content:"";width:0;height:0;border-left:5px solid currentColor;
+  border-top:4px solid transparent;border-bottom:4px solid transparent;
+  transition:transform 180ms var(--ease)}
+details.disc[open]>summary::before{transform:rotate(90deg)}
+details.disc[open]>summary{margin-bottom:var(--s3);color:var(--t1)}
+
+dl.kv{display:grid;grid-template-columns:auto 1fr;gap:7px var(--s4);font-size:var(--f2);margin:0}
+dl.kv dt{color:var(--t3)}
+dl.kv dd{margin:0;font-weight:560}
+
+.meter{height:6px;background:var(--c2);border-radius:999px;overflow:hidden}
+.meter i{display:block;height:100%;background:var(--a);border-radius:999px;
+  transition:width 520ms var(--ease)}
+
+.rule{border:0;border-top:1px solid var(--c3);margin:var(--s6) 0}
+.mut{color:var(--t3);font-size:var(--f1)}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+
+/* ============================================================== prose */
+.prose{max-width:74ch}
+.prose p{margin:var(--s3) 0;color:var(--t2);line-height:1.68}
+.prose p.big{font-size:var(--f4);color:var(--t1);line-height:1.55}
+.prose h3{font-size:var(--f4);margin:var(--s6) 0 var(--s2);color:var(--t1)}
+.prose h4{font-size:var(--f2);margin:var(--s5) 0 var(--s1);color:var(--t1);
+  text-transform:uppercase;letter-spacing:.06em;font-weight:700}
+.prose ul,.prose ol{margin:var(--s3) 0;padding-left:20px;color:var(--t2)}
+.prose li{margin:6px 0;line-height:1.6}
+.prose strong{color:var(--t1);font-weight:640}
+.wide{max-width:none}
+
+figure{margin:var(--s5) 0}
+figure svg{width:100%;height:auto;display:block}
+figcaption{font-size:var(--f1);color:var(--t3);margin-top:var(--s3);max-width:74ch;line-height:1.55}
+
+/* ============================================================= motion */
+@keyframes rise{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+/* The wrapper animates, not each child on a stagger: a stagger that is interrupted
+   (a slow frame, a screenshot, a print) can strand a later child at opacity 0, and
+   content that is sometimes invisible is a worse bug than a plainer entrance. */
+.anim{animation:rise 300ms var(--ease)}
+@media (prefers-reduced-motion:reduce){
+  *,*::before,*::after{animation-duration:1ms!important;animation-delay:0ms!important;
+    transition-duration:1ms!important}
+}
+
+/* ========================================================= lag chart */
+.lag{display:flex;align-items:flex-end;gap:5px;height:132px;padding-top:var(--s3)}
+.lag .col{flex:1;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;
+  gap:5px;cursor:pointer;background:none;border:0;padding:0;font:inherit;border-radius:var(--r1)}
+.lag .bar{width:100%;max-width:34px;border-radius:3px 3px 0 0;background:var(--c4);
+  transition:background 160ms var(--ease),transform 160ms var(--ease);min-height:2px}
+.lag .col:hover .bar,.lag .col:focus-visible .bar{transform:scaleY(1.04);transform-origin:bottom}
+.lag .col[aria-pressed="true"] .bar{background:var(--a)}
+.lag .col.neg .bar{background:var(--c3)}
+.lag .col[aria-pressed="true"].neg .bar{background:var(--t3)}
+.lag .lbl{font-size:10px;color:var(--t3);font-variant-numeric:tabular-nums}
+</style>
+</head>
+<body>
+<div class="ribbon">SYNTHETIC DEMONSTRATION DATA — every subscriber, complaint, cell and alarm here is generated. No real system, customer or network element is represented.</div>
+
+<div class="app">
+  <aside>
+    <div class="brand">
+      <b>TAZAMA</b>
+      <span>network care intelligence</span>
+      <em>placeholder wordmark — not an official logo</em>
+    </div>
+    <nav id="nav" aria-label="Sections"></nav>
+    <div class="asidefoot">
+      <label for="role">Viewing as</label>
+      <select id="role">
+        <option value="care_agent">Care agent</option>
+        <option value="noc_engineer">NOC engineer</option>
+        <option value="analyst">Analyst</option>
+        <option value="manager">Manager</option>
+        <option value="admin" selected>Admin</option>
+      </select>
+      <button class="btn sm" id="theme" type="button">Switch theme</button>
+    </div>
+  </aside>
+  <main id="main"></main>
+</div>
+
+<script>
+/* TAZAMA — standalone demo. One file, no network, no dependencies.
+   Figures read from the running application and the codebase on 2026-11-11. */
+const D = {
+  // GET /api/v1/incidents/overview
+  ov:{live:17, supp:2, subs:140201, c24:1053, corr:69, pending:0,
+    windowEnd:"2026-03-16 23:45 UTC",
+    cause:[["Congestion",13],["Cell outage",3],["Transmission link failure",1]],
+    region:[["Nairobi",8,96790],["Eldoret",7,23731],["Mombasa",2,19680]]},
+
+  // GET /api/v1/incidents
+  inc:[
+    {id:"INC_K8Y583VK8Q1CRF",t:"Transmission link failure",node:"TND_MBXYJ688JBMC66",
+     kind:"transmission link",cause:"transmission_link_failure",region:"Nairobi",pri:"P3",
+     st:"detected",cells:27,sites:9,subs:74950,ent:52,cmp:35,sla:0.60,
+     start:"2026-03-16 10:00 UTC",det:"2026-03-17 00:45 UTC",
+     dx:{cause:"planned_maintenance",conf:0.95,method:"rules",
+       sum:"Planned maintenance covers the affected window; no fault is implied.",
+       ev:[["maintenance","MWD_C9GMNDWN342EKT","a planned maintenance window covers this incident"]],
+       stop:"the rules answered above the certainty floor, so the model was never called"}},
+    {id:"INC_N92B2N4AFKE2BQ",t:"Cell outage",node:"SIT_0A7ZKXM4922QFJ",
+     kind:"site",cause:"cell_outage",region:"Mombasa",pri:"P3",
+     st:"detected",cells:4,sites:1,subs:11114,ent:5,cmp:5,sla:0.357,
+     start:"2026-03-16 04:00 UTC",det:"2026-03-17 00:45 UTC",
+     dx:{cause:"cell_outage",conf:0.88,method:"rules",
+       sum:"All cells on the site are unavailable and an alarm is raised on the site itself.",
+       ev:[["alarm","ALM site-level","an alarm on the site covers every affected cell"],
+           ["kpi","availability_pct","availability is at zero across all four cells"]],
+       stop:"the rules answered above the certainty floor, so the model was never called"}},
+    {id:"INC_2SRKJRDK5HWEST",t:"Cell outage",node:"SIT_1T1RYAVSYW7CKH",
+     kind:"site",cause:"cell_outage",region:"Mombasa",pri:"P3",
+     st:"detected",cells:4,sites:1,subs:8566,ent:4,cmp:3,sla:0.33,
+     start:"2026-03-16 06:00 UTC",det:"2026-03-17 00:45 UTC",
+     dx:{cause:"cell_outage",conf:0.88,method:"rules",
+       sum:"All cells on the site are unavailable and an alarm is raised on the site itself.",
+       ev:[["alarm","ALM site-level","an alarm on the site covers every affected cell"]],
+       stop:"the rules answered above the certainty floor, so the model was never called"}}],
+
+  // the six read tools the DiagnosisAgent called, with real timings
+  called:[["get_incident",26.3],["get_alarms",39.0],["get_topology",110.2],
+          ["get_maintenance",18.7],["get_complaint_summary",31.4],["list_runbooks",12.1]],
+  budget:{steps:"2 of 4",calls:"6 of 10",time:"0.31 s of 20 s"},
+
+  // ai/agents/tools.py — the typed registry
+  tools:[
+    ["get_incident","read","the incident row and its counts"],
+    ["get_alarms","read","alarms inside the incident window"],
+    ["get_kpi_window","read","hourly KPIs for the affected cells"],
+    ["get_complaint_summary","read","complaint counts and categories — never the text"],
+    ["get_topology","read","the nodes upstream of the affected cells"],
+    ["get_maintenance","read","planned maintenance covering the window"],
+    ["find_similar_incidents","read","past incidents with the same shape"],
+    ["list_runbooks","read","the runbook catalogue"],
+    ["search_knowledge","read","unexpired SOP documents only"],
+    ["propose_runbook","propose","writes a recommendation for a human to approve"],
+    ["propose_notification","propose","fills an approved template; sends nothing"],
+    ["execute_runbook","never","registered so it can be refused — never callable"]],
+
+  // GET /api/v1/ai/status
+  ai:{reachable:true, probe:"ok", calls:5, tokens:5271, cached:1, degraded:0,
+    models:["qwen-reasoning","qwen-fast","qwen-embedding"],
+    byTask:[["diagnose_incident",1],["suggest_sql",4]],
+    budCalls:"396 of 400 remaining", budTok:"1,995,766 of 2,000,000 remaining",
+    agents:[
+      ["DiagnosisAgent","Explain an ambiguous incident and pick a runbook","propose",
+       "deterministic rules — 7 of 7 on the labelled scenarios"],
+      ["KnowledgeAssistant","Answer from the written procedures, or decline","read",
+       "the retrieved excerpt verbatim, with its citation"],
+      ["Reporter","Draft the daily and weekly digest prose","read",
+       "a template-rendered digest with no model prose"]]},
+
+  // GET /api/v1/complaints
+  cmp:[
+    ["CMP_085N592BYFNKAT","23:56","one_app","sheng","—","slow_data","Data ime-kwama, hakuna kitu inaenda"],
+    ["CMP_4VXYQH4PFZGSHW","23:43","one_app","en","Mombasa","slow_data","Data is crawling even though I have full bars"],
+    ["CMP_N82RCV49JV8DWB","23:28","sms","mixed","Nakuru","voice_quality","Kuna echo kubwa on every call I make"],
+    ["CMP_B834GG0VJMTESS","23:27","call_centre","sw","Nakuru","unclassified","Mtandao ni mbaya sana leo"],
+    ["CMP_KTVNH5NSJ4J1S1","16:25","one_app","mixed","Nairobi","slow_data","Data iko slow sana, nothing is loading at all"]],
+  lex:{exact:69.1, binary:76.2, review:30.0},
+
+  // POST /api/v1/care/lookup {"identifier":"SUB-INQCJH5UOHGNLAP2"}
+  care:{tok:"SUB-INQCJH5UOHGNLAP2", region:"Nairobi", seg:"SME", ent:false, optout:false,
+    roam:false, seen:"2026-03-13 18:53 UTC",
+    cell:"Langata 054-4G-2", cellId:"CEL_7R92PK4F0B8M3E", tech:"4G", site:"SIT_XSMYHTDGQ8HPCM",
+    iss:{id:"INC_K8Y583VK8Q1CRF", cause:"transmission link failure", pri:"P3", subs:74950,
+      say:"We are aware of a service problem in your area (transmission link failure) and our engineers are working on it. We are sorry for the disruption.",
+      eta:"Engineers are on it; we are not giving a restoration time yet.", sent:false},
+    hist:[["CMP_KTVNH5NSJ4J1S1","2026-03-16 16:25","one_app","slow_data"],
+          ["CMP_0RRH9E4ME58CH7","2026-03-16 16:24","one_app","slow_data"]]},
+
+  // POST /api/v1/ai/sql → POST /api/v1/discovery/query
+  sql:{q:"Which regions have the most complaints?",
+    gen:"SELECT region, COUNT(*) AS complaints\nFROM complaint\nWHERE region IS NOT NULL\nGROUP BY region\nORDER BY complaints DESC",
+    why:"Counts complaint rows per region, highest first, skipping rows whose region could not be resolved.",
+    tables:["complaint"], conf:0.78,
+    ran:"SELECT region, COUNT(*) AS complaints FROM complaint WHERE NOT region IS NULL GROUP BY region ORDER BY complaints DESC LIMIT 1000",
+    warn:["A row limit of 1000 was added.",
+      "No time bound on complaint: this may scan the whole table. Add a predicate on a time column."],
+    cols:["region","complaints"],
+    rows:[["Nairobi",6074],["Mombasa",3791],["Kisumu",3226],["Nakuru",3173],["Eldoret",2118]],
+    ms:28.39},
+  sqlBad:{q:"Delete all the complaints from last week", gen:"DROP TABLE complaint",
+    why:"the suggestion schema accepts a single SELECT only, and this is not a read"},
+
+  // GET /api/v1/insights/*
+  ins:{win:{a:"2026-03-02 23:00 UTC", b:"2026-03-16 23:00 UTC", h:336},
+    busy:[["Nairobi CBD 070-4G-3","Nairobi","4G",49],["Manyatta 019-2G-1","Kisumu","2G",48],
+          ["Embakasi 023-2G-4","Nairobi","2G",46]],
+    lag:{cell:"Nairobi CBD 070-4G-3", kpi:"availability_pct", best:-3, r:0.1138,
+      leads:false, zero:-0.0493, n:336,
+      x:[-6,-5,-4,-3,-2,-1,0,1,2,3,4,5,6],
+      y:[0.0135,0.0697,-0.0660,0.1138,-0.0740,-0.0019,-0.0493,-0.0495,0.0317,-0.0326,0.0541,0.0034,0.0552],
+      caveats:["Normalised by an estimated subscriber count per cell, so the rate is only as good as that estimate.",
+        "13 lags were scanned and the best kept, which biases the correlation upward: treat it as a shortlist, not a measurement.",
+        "The sign is the opposite of this KPI's polarity — degradation should move with complaints — so this is more likely coincidence than a lead."]},
+    fc:{mae:0.0057, base:0.0067, gain:15.7, std:0.0045,
+      drivers:["hour of day","setup-success rate — falling success raises complaints",
+        "active users","busy-hour flag"]},
+    an:{recall:0.600, flag:3.93, prec:0.015}},
+
+  // GET /api/v1/reports/digest?kind=daily
+  dig:{id:"RPT-DAILY-20260316T0046", title:"TAZAMA daily network-care digest",
+    tz:"Africa/Nairobi", win:"2026-03-16 00:46 → 2026-03-17 00:46 UTC",
+    head:[["Incidents","17 live, 2 suppressed"],["By priority","P3 × 17"],
+      ["Subscribers affected","~140,201"],["Complaints","1,042 received, 69 correlated"],
+      ["Awaiting approval","0 proposed notification(s)"]]},
+
+  // make catalog → docs/data-catalog.md
+  joins:[["complaint → cell",10593,20377,51.99],["complaint → subscriber",19763,20377,96.99],
+    ["complaint → region",18382,20377,90.21],["care call → cell",2296,6000,38.27],
+    ["complaint → incident",69,20377,0.34],["complaint → site",0,20377,0.0]],
+
+  // config/source_mappings.yaml — 10 mapped entities, 100% column coverage
+  src:[["site","Physical tower sites","Planning export","location, region, status"],
+    ["cell","Radio cells on each site","Planning export","technology, azimuth, subscriber estimate"],
+    ["topology_node","Aggregation and transmission nodes","NMS inventory","the parent chain above each cell"],
+    ["topology_edge","Links between nodes","NMS inventory","which cells share a failure domain"],
+    ["alarm","Fault events","Fault management","severity, element, raised and cleared times"],
+    ["kpi_cell","Cell KPIs, hourly or 15-minute","Performance management","availability, setup success, throughput, users"],
+    ["maintenance_window","Planned work","Change management","element, window, description"],
+    ["subscriber","Home and last-seen cell","HLR / CBS","region, segment, enterprise flag, SLA tier"],
+    ["complaint","Customer complaints","CRM, USSD, app, social","channel, language, free text, timestamp"],
+    ["care_call","Contact-centre calls","CRM / contact centre","reason code, duration, timestamp"]],
+
+  // read from the codebase, 2026-11-11
+  arch:{files:171, tests:1686, modules:16, routers:15, routes:58, events:24,
+    states:16, triggers:16, ports:70, migrations:11, caps:21, roles:5},
+
+  // modules/correlation/service.py — the eleven rules, from the module docstring
+  rules:[
+    ["Spatio-temporal clustering","Complaints close in space and time are one event — normalised by the cell's subscriber estimate, so a busy cell must shout louder than a rural one."],
+    ["Topology-aware joining","Degradation on cells sharing an upstream element is one incident rooted at that element. The difference between “nine sites are broken” and “one transmission link is down”."],
+    ["Maintenance suppression","An approved window on the element or any ancestor means this was expected. Suppression is recorded, never silent."],
+    ["Alarm-storm collapsing","Alarms on related elements inside the collapse window are links on one incident, not N incidents."],
+    ["Flapping","Enough raise/clear transitions in an hour with no KPI impact is a hardware nuisance, not a customer incident."],
+    ["False-alarm rejection","An alarm with healthy KPIs and nobody complaining is rejected. Silence plus health means nothing is wrong."],
+    ["Non-network rejection","A billing surge is never a network incident, however big."],
+    ["Silent sufferers","KPI degradation past the policy threshold raises an incident with zero complaints."],
+    ["Silence as signal","A complaint rate that collapses against the cell's own baseline while KPIs collapse is evidence of an outage, not of health."],
+    ["Duplicate storms","Complaints sharing a dedupe key count once."],
+    ["Late events","Event time decides the window; a complaint may attach to an already-closed incident, returning a reopen signal rather than a second incident."]],
+
+  // modules/notification/service.py — the gate sequence
+  gates:[["Authorise the caller","capability checked server-side, never from the client"],
+    ["Storm guard","a system-wide ceiling on proposals per minute"],
+    ["Quiet hours","evaluated in the policy's timezone against a UTC instant"],
+    ["Per-subscriber gates","opt-out, per-incident cap, daily cap, dedupe window"],
+    ["Approved template","rendered from a template in English and Swahili — never free text"],
+    ["Human approval","with separation of duties: the proposer cannot approve their own proposal"],
+    ["Send","through the SMS port, mock mode only in v1"]],
+
+  // domain/state_machine.py
+  states:["received","validated","enriched","located","correlated","diagnosing","prioritised",
+    "routed","notifying","mitigating","verifying","resolved","closed"],
+  statesAlt:["reopened","human_review","suppressed"],
+
+  gatesCI:[["Backend tests","1,686 collected, all passing"],
+    ["Browser journeys","29 of 29 passing"],
+    ["Module boundary contracts","5 of 5 holding"],
+    ["Detection on labelled scenarios","precision 1.00, recall 1.00 against floors of 0.85 / 0.80"],
+    ["Diagnosis on labelled scenarios","7 of 7 correct, rules only, no model involved"],
+    ["Forecast gate","beats seasonal-naive by 15.7%, non-zero variance, wins on non-zero rows"],
+    ["Accessibility","no critical or serious violations; WCAG AA in both themes"],
+    ["Secret scan","clean"]]
+};
+
+/* core/security.py — PERMISSIONS, verbatim. The console gates navigation on these. */
+const CAPS = {
+  care_agent:  ["incident:read","complaint:read","complaint:write","subscriber:lookup",
+                "notification:propose","ai:ask"],
+  noc_engineer:["incident:read","incident:approve","incident:write","complaint:read",
+                "notification:propose","notification:approve","recovery:recommend",
+                "insights:read","catalog:read","report:read","ai:ask","ai:diagnose"],
+  analyst:     ["incident:read","complaint:read","insights:read","explorer:query",
+                "explorer:export","catalog:read","report:read","ai:ask","ai:diagnose","ai:quality"],
+  manager:     ["incident:read","incident:approve","complaint:read","notification:approve",
+                "recovery:approve","insights:read","catalog:read","report:read","ai:ask",
+                "ai:quality","audit:read"],
+  admin:       ["incident:read","incident:approve","incident:write","complaint:read",
+                "complaint:write","subscriber:lookup","notification:propose",
+                "notification:approve","recovery:recommend","recovery:approve","insights:read",
+                "explorer:query","explorer:export","catalog:read","report:read","report:send",
+                "ai:ask","ai:diagnose","ai:quality","audit:read","admin:manage"],
+};
+
+/* ------------------------------------------------------------- helpers */
+const E = (v) => String(v).replace(/[&<>"']/g, (c) =>
+  ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const N = (v) => v.toLocaleString("en-US");
+const CZ = (c) => c.replace(/_/g, " ");
+const met = (k, v, note, sm) =>
+  `<div class="met"><div class="k">${k}</div><div class="v${sm ? " sm" : ""}">${v}</div>` +
+  (note ? `<div class="n">${note}</div>` : "") + "</div>";
+const hero = (eyebrow, title, sub) =>
+  `<div class="hero"><div class="eyebrow">${eyebrow}</div><h1>${title}</h1>` +
+  (sub ? `<p class="sub">${sub}</p>` : "") + "</div>";
+
+function bars(caption, rows, unit) {
+  const max = Math.max(...rows.map((r) => r[1])) || 1;
+  return `<div class="scroll"><table><caption>${caption}</caption><thead><tr>
+    <th>Name</th><th class="num">${unit}</th><th style="width:46%"><span class="sr">Share</span></th>
+    </tr></thead><tbody>` + rows.map(([l, v]) => `<tr><td>${E(l)}</td>
+    <td class="num">${N(v)}</td><td style="padding-right:0">
+    <div class="meter"><i style="width:${(v / max * 100).toFixed(1)}%"></i></div></td></tr>`)
+    .join("") + "</tbody></table></div>";
+}
+
+/* State the screens share. */
+const S = { incident: D.inc[0].id, region: "all", diagnosed: {}, lag: null, asked: null,
+  ran: null, copied: false };
+
+/* ========================================================= OVERVIEW tab */
+function vHome() {
+  const o = D.ov;
+  const list = S.region === "all" ? D.inc : D.inc.filter((i) => i.region === S.region);
+  const regions = ["all", ...new Set(D.inc.map((i) => i.region))];
+  return `
+  ${hero("Command Center", "Every live incident, with the customer impact attached",
+    `What a NOC engineer opens first. ${o.live} live incidents across the seeded window, which ends ${o.windowEnd}.`)}
+
+  <section class="blk">
+    <div class="metrow cols c4">
+      ${met("Live incidents", o.live, o.supp + " suppressed as duplicates")}
+      ${met("Subscribers affected", "~" + N(o.subs), "summed across live incidents")}
+      ${met("Complaints, 24h", N(o.c24), o.corr + " tied to an incident")}
+      ${met("Awaiting approval", o.pending, "proposed customer notifications")}
+    </div>
+  </section>
+
+  <section class="blk">
+    <h2>Live incidents</h2>
+    <p class="lede">Select any row to open its card. Each one carries the same evidence trail.</p>
+    <div class="panel">
+      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:var(--s4)">
+        ${regions.map((r) => `<button class="btn sm" data-region="${r}"
+          aria-pressed="${S.region === r}">${r === "all" ? "All regions" : r}</button>`).join("")}
+      </div>
+      <div class="scroll"><table>
+        <caption>Live incidents${S.region === "all" ? "" : " in " + S.region}</caption>
+        <thead><tr><th>Incident</th><th>Cause</th><th>Region</th><th class="num">Cells</th>
+          <th class="num">Subscribers</th><th class="num">Complaints</th>
+          <th class="num">SLA risk</th></tr></thead>
+        <tbody>${list.length ? list.map((i) => `
+          <tr class="pick" data-incident="${i.id}" tabindex="0" role="button"
+              aria-selected="${S.incident === i.id}" aria-label="Open ${i.id}">
+            <td><strong>${E(i.t)}</strong><div class="mut mono">${i.id}</div></td>
+            <td><span class="tag mu">${CZ(i.cause)}</span></td>
+            <td>${i.region}</td><td class="num">${i.cells}</td>
+            <td class="num">${N(i.subs)}</td><td class="num">${i.cmp}</td>
+            <td class="num">${i.sla.toFixed(2)}</td></tr>`).join("")
+          : `<tr><td colspan="7" class="mut">No incidents in ${E(S.region)}.</td></tr>`}
+        </tbody></table></div>
+      <p class="mut" style="margin-top:var(--s3)">Showing ${list.length} of ${o.live}.</p>
+    </div>
+  </section>
+
+  <section class="blk">
+    <div class="cols c2">
+      <div class="panel"><h2 style="font-size:var(--f3);margin-bottom:var(--s3)">By cause</h2>
+        ${bars("Live incidents grouped by diagnosed cause", o.cause, "Incidents")}</div>
+      <div class="panel"><h2 style="font-size:var(--f3);margin-bottom:var(--s3)">By region</h2>
+        <div class="scroll"><table><caption>Incidents and affected subscribers per region</caption>
+        <thead><tr><th>Region</th><th class="num">Incidents</th>
+          <th class="num">Subscribers</th></tr></thead>
+        <tbody>${o.region.map(([r, i, s]) => `<tr><td>${r}</td><td class="num">${i}</td>
+          <td class="num">${N(s)}</td></tr>`).join("")}</tbody></table></div></div>
+    </div>
+  </section>
+
+  <section class="blk">
+    <h2>How much of the customer signal we can actually use</h2>
+    <p class="lede">Measured on every data-catalog run, and published rather than hidden.</p>
+    <div class="panel">
+      <div class="scroll"><table><caption>Join coverage from complaint to network element</caption>
+        <thead><tr><th>Join</th><th class="num">Resolved</th><th class="num">Total</th>
+          <th class="num">Coverage</th></tr></thead>
+        <tbody>${D.joins.map(([k, a, b, p]) => `<tr><td>${k}</td><td class="num">${N(a)}</td>
+          <td class="num">${N(b)}</td><td class="num">${p.toFixed(2)}%</td></tr>`).join("")}
+        </tbody></table></div>
+      <div class="msg wn"><strong>The honest ceiling.</strong> Only <strong>51.99%</strong> of
+        complaints can be tied to a specific cell. Matching a complaint to the cell that was
+        serving that customer is the hardest problem in the product, so it is measured every
+        run and shown here. On live data, improving this is worth more than any new model.</div>
+    </div>
+  </section>`;
+}
+
+/* ======================================================== INCIDENT card */
+function vIncident() {
+  const i = D.inc.find((x) => x.id === S.incident) || D.inc[0];
+  const done = S.diagnosed[i.id];
+  return `
+  ${hero("Incident", E(i.t) + " &middot; " + i.region,
+    `<span class="mono">${i.id}</span> &middot; opened ${i.start} &middot; detected ${i.det}`)}
+
+  <section class="blk">
+    <div class="metrow cols c4">
+      ${met("Priority", i.pri, "weighted rule, factors stored", true)}
+      ${met("Cells affected", i.cells, i.sites + (i.sites === 1 ? " site" : " sites"), true)}
+      ${met("Subscribers", N(i.subs), i.ent + " enterprise accounts", true)}
+      ${met("SLA risk", i.sla.toFixed(2), i.cmp + " complaints attached", true)}
+    </div>
+  </section>
+
+  <section class="blk">
+    <div class="cols c2">
+      <div class="panel">
+        <h2 style="font-size:var(--f3)">Why these ${i.cells} cells are one incident</h2>
+        <p class="mut" style="margin:var(--s1) 0 var(--s4)">The grouping an engineer has to defend</p>
+        <dl class="kv">
+          <dt>Shared element</dt><dd class="mono">${i.node}</dd>
+          <dt>Element type</dt><dd>${i.kind}</dd>
+          <dt>Region</dt><dd>${i.region}</dd>
+          <dt>Status</dt><dd><span class="tag in">${i.st}</span></dd></dl>
+        <div class="msg"><strong>In one sentence:</strong> all ${i.cells} cells sit below the
+          same ${i.kind}, and the alarm is on that element. One fault with a ${i.cells}-cell
+          footprint, not ${i.cells} faults — so the NOC gets one ticket, not ${i.cells}.</div>
+      </div>
+      <div class="panel">
+        <h2 style="font-size:var(--f3)">Customer impact</h2>
+        <p class="mut" style="margin:var(--s1) 0 var(--s4)">Assembled before the ticket opens, not after</p>
+        <dl class="kv">
+          <dt>Subscribers</dt><dd>${N(i.subs)}</dd>
+          <dt>Enterprise accounts</dt><dd>${i.ent}</dd>
+          <dt>Complaints attached</dt><dd>${i.cmp}</dd>
+          <dt>Cells / sites</dt><dd>${i.cells} / ${i.sites}</dd></dl>
+        <div class="msg">In the current process an engineer assembles this from several systems
+          before they can judge urgency. Here it arrives with the incident.</div>
+      </div>
+    </div>
+  </section>
+
+  <section class="blk">
+    <h2>AI diagnosis</h2>
+    <p class="lede">Opt-in on purpose: running it spends model budget and writes a decision record.</p>
+    <div class="panel">
+      <div style="display:flex;gap:var(--s3);align-items:center;flex-wrap:wrap">
+        <button class="btn pri" id="diagnose" ${done ? "disabled" : ""}>
+          ${done ? "Diagnosed" : "Diagnose this incident"}</button>
+        <span class="mut">${done ? "Answered by the rules — no model was called."
+          : "Nothing is called until you press it."}</span></div>
+      <div id="dx">${done ? dxPanel(i) : ""}</div>
+    </div>
+  </section>`;
+}
+
+function dxPanel(i) {
+  const d = i.dx;
+  const planned = d.cause === "planned_maintenance";
+  return `
+  <div class="metrow cols c3" style="margin-top:var(--s5)">
+    ${met("Cause", CZ(d.cause), "", true)}
+    ${met("Confidence", d.conf.toFixed(2), "floor 0.55", true)}
+    ${met("Answered by", d.method === "rules" ? "Rules" : "Model",
+      d.method === "rules" ? "no model was called" : "schema-validated", true)}
+  </div>
+  <p style="margin-top:var(--s4);font-size:var(--f4);font-weight:560">${E(d.sum)}</p>
+  ${planned ? `<div class="msg ok"><strong>Worth pausing on.</strong> The incident is titled
+    <em>transmission link failure</em>, but the rules found a planned-maintenance window
+    covering the whole affected period. The honest answer is “this is expected work, not a
+    fault”, at 0.95 certainty, with the maintenance record attached. No model was called,
+    nothing was guessed, and nobody gets woken up. A system that cannot tell planned work
+    from a fault generates false alarms until people stop trusting it.</div>` : ""}
+
+  <h4 style="margin-top:var(--s5);font-size:var(--f1);text-transform:uppercase;
+    letter-spacing:.06em;color:var(--t3)">Evidence</h4>
+  <div class="scroll"><table><caption class="sr">Records the diagnosis rests on</caption>
+    <thead><tr><th>Kind</th><th>Reference</th><th>Why it matters</th></tr></thead>
+    <tbody>${d.ev.map(([k, r, w]) => `<tr><td><span class="tag mu">${k}</span></td>
+      <td class="mono">${E(r)}</td><td>${E(w)}</td></tr>`).join("")}</tbody></table></div>
+
+  <details class="disc" open><summary>What the agent did — ${D.called.length} tools called, 0 refused</summary>
+    <dl class="kv" style="margin-bottom:var(--s4)">
+      <dt>Agent</dt><dd>DiagnosisAgent</dd>
+      <dt>Goal</dt><dd class="mono">diagnose ${i.id}</dd>
+      <dt>Steps</dt><dd>gather evidence &rarr; deterministic rules</dd>
+      <dt>Budget spent</dt><dd>${D.budget.steps} steps &middot; ${D.budget.calls} tool calls
+        &middot; ${D.budget.time}</dd>
+      <dt>Stopped because</dt><dd>${E(d.stop)}</dd></dl>
+    <div class="scroll"><table><caption>Tools called, in order</caption>
+      <thead><tr><th>Tool</th><th>Tier</th><th class="num">Time</th></tr></thead>
+      <tbody>${D.called.map(([nm, ms]) => `<tr><td class="mono">${nm}</td>
+        <td><span class="tag ok">read</span></td>
+        <td class="num">${ms.toFixed(1)} ms</td></tr>`).join("")}</tbody></table></div>
+    <div class="msg wn"><strong>Why the refused list is the point.</strong> Nothing needed
+      refusing here, because the rules answered and the agent never asked to act. The
+      guarantee does not depend on that: <span class="mono">execute_runbook</span> is
+      registered at tier <span class="mono">never</span>, so a request to run it is refused by
+      the harness and written to the trace. The agent holds no network credentials and no
+      adapter that could reach a network element. It reads, and it proposes.</div></details>`;
+}
+
+/* ====================================================== COMPLAINTS tab */
+function vComplaints() {
+  const l = D.lex;
+  return `
+  ${hero("Complaints", "What customers are actually saying",
+    "Across USSD, the app, SMS, the contact centre and social — in English, Swahili, Sheng, and all of them mixed together.")}
+
+  <section class="blk">
+    <div class="metrow cols c3">
+      ${met("Exact category", l.exact + "%", "measured against labelled data")}
+      ${met("Network vs not", l.binary + "%", "the decision that gates routing")}
+      ${met("Sent to a human", l.review + "%", "below the confidence floor, by design")}
+    </div>
+  </section>
+
+  <section class="blk">
+    <h2>Recent complaints</h2>
+    <p class="lede">Classified by a deterministic multilingual lexicon, in under a millisecond, at no cost.</p>
+    <div class="panel">
+      <div class="scroll"><table><caption>Recent complaints with channel, language and category</caption>
+        <thead><tr><th>Time</th><th>Channel</th><th>Language</th><th>Region</th>
+          <th>Category</th><th>Text</th></tr></thead>
+        <tbody>${D.cmp.map(([, at, ch, lg, rg, cat, tx]) => `<tr>
+          <td class="mut">${at}</td><td>${ch}</td><td><span class="tag mu">${lg}</span></td>
+          <td>${rg}</td><td>${cat === "unclassified"
+            ? '<span class="tag wn">unclassified</span>'
+            : '<span class="tag in">' + CZ(cat) + "</span>"}</td>
+          <td>${E(tx)}</td></tr>`).join("")}</tbody></table></div>
+
+      <div class="msg in"><strong>Look at the fourth row.</strong>
+        <em>“Mtandao ni mbaya sana leo”</em> — “the network is very bad today”. It plainly names
+        the network but describes no symptom, so it stays <strong>unclassified</strong> and
+        still counts towards the incident. That phrasing is an enormous share of real traffic;
+        treating it as non-network would throw away exactly the signal this product exists to
+        catch.</div>
+
+      <div class="msg"><strong>Why a dictionary and not a language model.</strong> It is
+        inspectable, instant, free, and its accuracy is <em>known</em> because it was tuned
+        against labelled data. 69.1% exact is a modest number, stated honestly — and the 30%
+        review rate is a feature: a guess that knows it is a guess goes to a person. The model
+        path is built and schema-validated behind it, for the ambiguous remainder.</div>
+    </div>
+  </section>`;
+}
+
+/* ============================================================ CARE tab */
+function vCare() {
+  const c = D.care, i = c.iss;
+  return `
+  ${hero("Care lookup", "What the agent sees when a customer calls",
+    "Ten seconds, honest information, and nothing the agent has to invent.")}
+
+  <section class="blk">
+    <div class="cols c2">
+      <div class="panel">
+        <h2 style="font-size:var(--f3)">Subscriber</h2>
+        <p class="mut" style="margin:var(--s1) 0 var(--s4)">Found by pseudonym token — the phone number never reaches this screen</p>
+        <dl class="kv">
+          <dt>Token</dt><dd class="mono">${c.tok}</dd>
+          <dt>Region</dt><dd>${c.region}</dd>
+          <dt>Segment</dt><dd>${c.seg}</dd>
+          <dt>Enterprise</dt><dd>${c.ent ? "yes" : "no"}</dd>
+          <dt>Roaming</dt><dd>${c.roam ? "yes" : "no"}</dd>
+          <dt>Opted out</dt><dd>${c.optout ? "yes" : "no"}</dd>
+          <dt>Serving cell</dt><dd>${c.cell} <span class="mut">(${c.tech})</span></dd>
+          <dt>Last seen</dt><dd>${c.seen}</dd></dl>
+        <div class="msg in"><strong>Privacy, structurally.</strong> The MSISDN is
+          HMAC-pseudonymised at the ingestion boundary. Analytics, the AI layer, the logs, the
+          exports, the Teams cards and this screen all see the token and never the number. It
+          is not a setting that can be switched off downstream — the raw identifier does not
+          travel.</div>
+      </div>
+
+      <div class="panel">
+        <h2 style="font-size:var(--f3)">Known issue in this area</h2>
+        <p class="mut" style="margin:var(--s1) 0 var(--s4)">The agent does not have to guess, and does not have to promise</p>
+        <dl class="kv">
+          <dt>Incident</dt><dd class="mono">${i.id}</dd>
+          <dt>Priority</dt><dd><span class="tag in">${i.pri}</span></dd>
+          <dt>Cause</dt><dd>${i.cause}</dd>
+          <dt>Others affected</dt><dd>${N(i.subs)} subscribers</dd>
+          <dt>Message sent</dt><dd>${i.sent ? "yes" : "not yet — awaiting approval"}</dd></dl>
+
+        <h4 style="margin-top:var(--s5);font-size:var(--f1);text-transform:uppercase;
+          letter-spacing:.06em;color:var(--t3)">Approved wording — read this out</h4>
+        <pre class="code">${E(i.say)}</pre>
+        <div style="display:flex;gap:var(--s3);align-items:center;margin-top:var(--s3)">
+          <button class="btn sm" id="copysay">Copy</button>
+          <span class="mut" id="copied">${S.copied ? "Copied — read it as written." : ""}</span></div>
+        <p style="margin-top:var(--s4);font-size:var(--f2)"><strong>On restoration time:</strong>
+          ${E(i.eta)}</p>
+        <div class="msg wn"><strong>There is no free-text box here, deliberately.</strong> The
+          agent reads an approved template, and every template exists in English and Swahili. A
+          model may fill slots in it; it may never write prose to a customer. An invented
+          restoration time is a broken promise at scale, and the cheapest way to guarantee one
+          never happens is to make writing one impossible.</div>
+      </div>
+    </div>
+  </section>
+
+  <section class="blk">
+    <h2>This customer's recent complaints</h2>
+    <div class="panel">
+      <div class="scroll"><table><caption class="sr">Complaints raised by this subscriber</caption>
+        <thead><tr><th>Reference</th><th>Received</th><th>Channel</th><th>Category</th></tr></thead>
+        <tbody>${c.hist.map(([id, at, ch, cat]) => `<tr><td class="mono">${id}</td>
+          <td class="mut">${at}</td><td>${ch}</td>
+          <td><span class="tag in">${CZ(cat)}</span></td></tr>`).join("")}</tbody></table></div>
+    </div>
+  </section>`;
+}
+
+/* ======================================================== EXPLORER tab */
+function vExplorer() {
+  return `
+  ${hero("Data Explorer", "Ask in plain English. Read the SQL. Then run it.",
+    "The model writes the query, a human approves it, and the existing guard is the only thing that can execute.")}
+
+  <section class="blk">
+    <h2>Ask a question</h2>
+    <p class="lede">Two ordinary questions and one attack. The attack is the important one.</p>
+    <div class="panel">
+      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:var(--s4)">
+        <button class="btn sm" data-ask="ok" aria-pressed="${S.asked === "ok"}">Which regions have the most complaints?</button>
+        <button class="btn sm" data-ask="ok2" aria-pressed="${S.asked === "ok2"}">Complaints per channel last week</button>
+        <button class="btn sm" data-ask="bad" aria-pressed="${S.asked === "bad"}">Delete all the complaints from last week</button>
+      </div>
+      <div id="askout">${S.asked ? askPanel(S.asked) : '<p class="mut">Pick a question above.</p>'}</div>
+    </div>
+  </section>
+
+  <section class="blk">
+    <h2>SQL editor</h2>
+    <p class="lede">Where an approved suggestion lands — and the only path that can execute anything.</p>
+    <div class="panel">
+      <textarea id="sqlbox" aria-label="SQL to run"
+        placeholder="Use a suggestion above, or type your own SELECT and watch the guard decide.">${S.ran === null ? "" : E(S.ranSql || "")}</textarea>
+      <div style="display:flex;gap:var(--s3);align-items:center;margin-top:var(--s3);flex-wrap:wrap">
+        <button class="btn pri" id="run">Run query</button>
+        <span class="mut">SELECT only &middot; allowlisted tables &middot; row cap &middot; timeout &middot; audited</span></div>
+      <div id="runout">${S.ran !== null ? runPanel(S.ran) : ""}</div>
+    </div>
+  </section>`;
+}
+
+function askPanel(kind) {
+  if (kind === "bad") {
+    const b = D.sqlBad;
+    return `
+    <p class="mut">Question asked</p><pre class="code">${E(b.q)}</pre>
+    <div class="metrow cols c3" style="margin:var(--s4) 0">
+      ${met("Schema check", "Rejected", "never reached a screen", true)}
+      ${met("Guard verdict", "Not evaluated", "nothing valid to evaluate", true)}
+      ${met("Executed", "No", "no execution path exists here", true)}
+    </div>
+    <p class="mut">What the model returned</p><pre class="code">${E(b.gen)}</pre>
+    <div class="msg wn"><strong>Refused: ${E(b.why)}.</strong> This is the test that matters
+      most, and it simulates a <em>fully compromised</em> model returning
+      <span class="mono">DROP TABLE complaint</span>. Nothing happens. The response type on
+      this route carries a string and a verdict — there is no execution path to abuse, and a
+      second statement smuggled after a semicolon is rejected the same way.</div>`;
+  }
+  const q = D.sql;
+  const asked = kind === "ok2" ? "Complaints per channel last week" : q.q;
+  return `
+  <p class="mut">Question asked</p><pre class="code">${E(asked)}</pre>
+  <div class="metrow cols c3" style="margin:var(--s4) 0">
+    ${met("Guard verdict", "Would accept", "decided without running it", true)}
+    ${met("Confidence", q.conf.toFixed(2), "the model's own estimate", true)}
+    ${met("Executed", "No", "a human has to press Run", true)}
+  </div>
+  <p style="font-size:var(--f2);color:var(--t2)">${E(q.why)}</p>
+  <p class="mut" style="margin-top:var(--s4)">Suggested SQL — read it before you run it</p>
+  <pre class="code">${E(q.gen)}</pre>
+  <p class="mut" style="margin-top:var(--s2)">Tables read: <span class="mono">${q.tables.join(", ")}</span></p>
+  <div style="margin-top:var(--s4)"><button class="btn pri" id="use">Use this query</button>
+    <span class="mut" style="margin-left:var(--s3)">Loads it into the editor. Still does not run it.</span></div>
+  <div class="msg"><strong>Why you see the SQL and not just the answer.</strong> The dangerous
+    failure is not a destructive statement — the schema and the guard stop those. It is a query
+    that is valid, permitted and <em>subtly wrong</em>: a join that double-counts, a window off
+    by an hour. Showing the SQL makes that reviewable. Showing only the number makes it
+    invisible, and a wrong number in front of leadership is the real risk.</div>`;
+}
+
+/* The guard, evaluated for real on whatever the user typed. */
+function guard(sql) {
+  const s = sql.trim().replace(/;\s*$/, "");
+  if (!s) return { ok: false, why: "There is nothing to run." };
+  if (s.includes(";")) {
+    return { ok: false, why: "Only a single statement may run. A second statement after a " +
+      "semicolon is refused — this is how injection usually arrives." };
+  }
+  const head = s.replace(/^\(+\s*/, "").toUpperCase();
+  if (!(head.startsWith("SELECT") || head.startsWith("WITH"))) {
+    const verb = (head.match(/^[A-Z]+/) || ["that statement"])[0];
+    return { ok: false, why: `<span class="mono">${E(verb)}</span> is not a read. The guard ` +
+      "parses the statement into a syntax tree — it does not match strings — and executes " +
+      "reads only. The attempt is audited with the role that made it." };
+  }
+  const known = s.replace(/\s+/g, " ").toUpperCase() ===
+    D.sql.gen.replace(/\s+/g, " ").trim().toUpperCase();
+  return { ok: true, known };
+}
+
+function runPanel(sql) {
+  const g = guard(sql);
+  if (!g.ok) return `<div class="msg wn"><strong>Refused by the SQL guard.</strong> ${g.why}</div>`;
+  if (!g.known) {
+    return `<div class="msg ok"><strong>The guard would accept this.</strong> It is a single
+      read against allowlisted tables, so it would be parsed, row-capped, timed out and
+      audited, then executed.</div>
+      <div class="msg"><strong>No result is shown, because this file has no database.</strong>
+        Results are canned for the one sample query only. Inventing rows for an arbitrary query
+        would be exactly the dishonesty the rest of this demo argues against — so it does not.
+        Press <em>Use this query</em> above to run the sample.</div>`;
+  }
+  const q = D.sql;
+  return `
+  <div class="msg ok">Executed in ${q.ms} ms &middot; ${q.rows.length} rows &middot; audited against your role.</div>
+  <div class="scroll" style="margin-top:var(--s4)"><table><caption>Query result</caption>
+    <thead><tr>${q.cols.map((c) => `<th${c === "complaints" ? ' class="num"' : ""}>${c}</th>`).join("")}</tr></thead>
+    <tbody>${q.rows.map((r) => `<tr><td>${r[0]}</td><td class="num">${N(r[1])}</td></tr>`).join("")}
+    </tbody></table></div>
+  <details class="disc"><summary>What the guard actually ran, and what it warned about</summary>
+    <pre class="code">${E(q.ran)}</pre>
+    <ul style="margin:var(--s3) 0 0;padding-left:18px;color:var(--t2);font-size:var(--f2)">
+      ${q.warn.map((w) => `<li>${E(w)}</li>`).join("")}</ul>
+    <p class="mut" style="margin-top:var(--s3)">The guard added the row cap itself and warned
+      that the query has no time bound. Both are real outputs, not decoration.</p></details>`;
+}
+
+/* ======================================================== INSIGHTS tab */
+function vInsights() {
+  const s = D.ins, l = s.lag, f = s.fc, a = s.an;
+  const max = Math.max(...l.y.map(Math.abs));
+  const sel = S.lag === null ? l.x.indexOf(l.best) : S.lag;
+  return `
+  ${hero("Insights", "Where network behaviour and customer behaviour are compared",
+    `Analysis window ${s.win.a} to ${s.win.b} — ${s.win.h} hours.`)}
+
+  <section class="blk">
+    <h2>Does the network degrade before customers complain?</h2>
+    <p class="lede">Cross-correlation at lags of &minus;6 to +6 hours &middot; ${l.cell} &middot;
+      <span class="mono">${l.kpi}</span></p>
+    <div class="panel">
+      <div class="lag" role="group" aria-label="Correlation at each lag">
+        ${l.x.map((lag, k) => `<button class="col${l.y[k] < 0 ? " neg" : ""}" data-lag="${k}"
+          aria-pressed="${sel === k}"
+          aria-label="Lag ${lag} hours, correlation ${l.y[k].toFixed(4)}">
+          <span class="bar" style="height:${Math.max(2, Math.abs(l.y[k]) / max * 104)}px"></span>
+          <span class="lbl">${lag}</span></button>`).join("")}
+      </div>
+      <div class="metrow cols c3" style="margin-top:var(--s4)">
+        ${met("Selected lag", (l.x[sel] > 0 ? "+" : "") + l.x[sel] + " h",
+          l.x[sel] === l.best ? "the strongest found" : "click any bar", true)}
+        ${met("Correlation", l.y[sel].toFixed(4), "r, at that lag", true)}
+        ${met("KPI leads complaints", l.leads ? "Yes" : "No", "the tool's own verdict", true)}
+      </div>
+
+      <div class="msg wn"><strong>The honest answer on this data: no.</strong> The strongest
+        correlation found anywhere in the scan is <strong>r = ${l.r.toFixed(2)}</strong>, which
+        is very weak, and the tool reports <span class="mono">kpi_leads: false</span>. It then
+        publishes its own three reasons for distrusting even that:
+        <ul>${l.caveats.map((c) => `<li>${E(c)}</li>`).join("")}</ul>
+        This is the behaviour worth caring about. A dashboard that turned r = 0.11 into “the
+        network warns us three hours ahead” would be telling you a story the data does not
+        support — and somebody would eventually check. On real data this becomes a genuine
+        measurement; on synthetic data it correctly refuses to claim one.</div>
+    </div>
+  </section>
+
+  <section class="blk">
+    <div class="cols c2">
+      <div class="panel">
+        <h2 style="font-size:var(--f3)">Call-surge forecast</h2>
+        <p class="mut" style="margin:var(--s1) 0 var(--s4)">Complaint volume one hour ahead, per region, for care staffing</p>
+        <div class="metrow cols c3">
+          ${met("Model error", f.mae.toFixed(4), "mean absolute error", true)}
+          ${met("Baseline", f.base.toFixed(4), "seasonal-naive", true)}
+          ${met("Improvement", "+" + f.gain + "%", "held-out, time-ordered", true)}
+        </div>
+        <h4 style="margin-top:var(--s5);font-size:var(--f1);text-transform:uppercase;
+          letter-spacing:.06em;color:var(--t3)">What drives a prediction</h4>
+        <ol style="margin:var(--s2) 0 0;padding-left:20px;color:var(--t2);font-size:var(--f2)">
+          ${f.drivers.map((d) => `<li style="margin:4px 0">${E(d)}</li>`).join("")}</ol>
+        <div class="msg">Every sign points the direction physics requires — falling setup
+          success raises complaints — which is the best available evidence that it learned
+          something real rather than fitting noise.</div>
+      </div>
+
+      <div class="panel">
+        <h2 style="font-size:var(--f3)">Unusual cell behaviour</h2>
+        <p class="mut" style="margin:var(--s1) 0 var(--s4)">Each cell compared against itself, at this hour of this weekday</p>
+        <div class="metrow cols c3">
+          ${met("Recall", a.recall.toFixed(2), "of seeded incident windows", true)}
+          ${met("Alert volume", a.flag + "%", "of cell-hours flagged", true)}
+          ${met("Precision", "~" + a.prec.toFixed(3), "recorded, not gated", true)}
+        </div>
+        <div class="msg">The gate is recall <em>plus alert volume</em>, because the question
+          that decides whether anyone keeps the alarm switched on is “will this drown whoever is
+          on shift?”. Precision is deliberately not gated: the labels are incidents, so a real
+          degradation that never produced one counts as a false positive. Gating on a number
+          that cannot be reached teaches a team to disable the gate.</div>
+      </div>
+    </div>
+  </section>
+
+  <section class="blk">
+    <h2>Busiest cells by complaint volume</h2>
+    <div class="panel">${bars("Cells with the most complaints in the window",
+      s.busy.map((b) => [b[0] + " · " + b[1] + " · " + b[2], b[3]]), "Complaints")}</div>
+  </section>`;
+}
+
+/* ========================================================= REPORTS tab */
+function vReports() {
+  const g = D.dig, i = D.inc[0];
+  return `
+  ${hero("Reports", "The digest, exactly as it would be posted",
+    "Daily and weekly, to a Microsoft Teams channel — previewed here before anything leaves the building.")}
+
+  <section class="blk">
+    <div class="panel">
+      <h2 style="font-size:var(--f4)">${E(g.title)}</h2>
+      <p class="mut" style="margin:var(--s1) 0 var(--s4)"><span class="mono">${g.id}</span>
+        &middot; ${g.win} &middot; shown in ${g.tz}</p>
+      <div class="scroll"><table><caption class="sr">Digest headline figures</caption>
+        <tbody>${g.head.map(([k, v]) => `<tr><th style="width:40%">${k}</th>
+          <td><strong>${E(v)}</strong></td></tr>`).join("")}</tbody></table></div>
+
+      <h4 style="margin-top:var(--s5);font-size:var(--f1);text-transform:uppercase;
+        letter-spacing:.06em;color:var(--t3)">Top incident in this window</h4>
+      <div class="scroll"><table><caption class="sr">The incident the digest leads with</caption>
+        <thead><tr><th>Incident</th><th>Cause</th><th class="num">Cells</th>
+          <th class="num">Subscribers</th><th class="num">Complaints</th></tr></thead>
+        <tbody><tr><td class="mono">${i.id}</td><td>${CZ(i.cause)}</td>
+          <td class="num">${i.cells}</td><td class="num">${N(i.subs)}</td>
+          <td class="num">${i.cmp}</td></tr></tbody></table></div>
+
+      <div class="msg ok"><strong>Nothing was sent.</strong> Outbound delivery is off by default
+        (<span class="mono">TEAMS_DRY_RUN=true</span>), so the digest renders and stops. The
+        webhook URL is never logged, and no card carries a phone number — the payload is scanned
+        for identifiers before release. Turning delivery on is a deliberate, per-environment
+        configuration change.</div>
+      <div class="msg">Scheduling is written and tested — 07:30 daily and 08:00 Monday,
+        Africa/Nairobi, stored as local time and converted at comparison so a timezone rule
+        change cannot silently shift it. What is missing is a provisioned webhook, which is an
+        IT request rather than engineering work.</div>
+    </div>
+  </section>`;
+}
+
+/* ============================================================= AI tab */
+function vAi() {
+  const a = D.ai;
+  return `
+  ${hero("AI quality", "What the model is, what it cost, and what it may touch",
+    "Including what happens when it is switched off — which is the most important part.")}
+
+  <section class="blk">
+    <div class="metrow cols c4">
+      ${met("Endpoint", a.reachable ? "Reachable" : "Unreachable", "probe: " + a.probe, true)}
+      ${met("Model calls", a.calls, a.cached + " served from cache", true)}
+      ${met("Tokens used", N(a.tokens), "metered against a hard ceiling", true)}
+      ${met("Degraded answers", a.degraded, "fell back to the rules", true)}
+    </div>
+  </section>
+
+  <section class="blk">
+    <div class="cols c2">
+      <div class="panel">
+        <h2 style="font-size:var(--f3)">The three agents</h2>
+        <p class="mut" style="margin:var(--s1) 0 var(--s4)">There are exactly three, and each has a ceiling it cannot exceed</p>
+        <div class="scroll"><table><caption class="sr">Agents, ceilings and fallbacks</caption>
+          <thead><tr><th>Agent</th><th>Ceiling</th><th>If the model is gone</th></tr></thead>
+          <tbody>${a.agents.map(([nm, pu, ce, fb]) => `<tr>
+            <td><strong>${nm}</strong><div class="mut">${E(pu)}</div></td>
+            <td><span class="tag ${ce === "read" ? "ok" : "wn"}">${ce}</span></td>
+            <td>${E(fb)}</td></tr>`).join("")}</tbody></table></div>
+        <div class="msg"><strong>The ceiling is enforced by the harness that runs the tools,
+          not by the instructions given to the model</strong> — so it cannot be talked out of
+          it.</div>
+      </div>
+
+      <div class="panel">
+        <h2 style="font-size:var(--f3)">Budget and spend</h2>
+        <p class="mut" style="margin:var(--s1) 0 var(--s4)">Every agent is bounded by steps, tool calls, tokens and wall-clock</p>
+        <dl class="kv">
+          <dt>Call budget</dt><dd>${a.budCalls}</dd>
+          <dt>Token budget</dt><dd>${a.budTok}</dd>
+          <dt>Models</dt><dd class="mono">${a.models.join(", ")}</dd></dl>
+        <div style="margin-top:var(--s4)">${bars("Model calls grouped by task", a.byTask, "Calls")}</div>
+        <div class="msg">A budget that fires is not an error: the agent returns the answer it
+          has, with the reason recorded on the trace.</div>
+      </div>
+    </div>
+  </section>
+
+  <section class="blk">
+    <h2>Every tool, and the tier it sits at</h2>
+    <p class="lede">A typed registry. Permission is a property of the tool, never derived from text.</p>
+    <div class="panel">
+      <div class="scroll"><table><caption class="sr">The complete tool registry</caption>
+        <thead><tr><th>Tool</th><th>Tier</th><th>What it does</th></tr></thead>
+        <tbody>${D.tools.map(([nm, ti, wh]) => `<tr><td class="mono">${nm}</td>
+          <td><span class="tag ${ti === "read" ? "ok" : ti === "propose" ? "wn" : "bd"}">${ti}</span></td>
+          <td>${E(wh)}</td></tr>`).join("")}</tbody></table></div>
+      <div class="msg wn"><strong>Nine read, two propose, one never.</strong>
+        <span class="mono">propose</span> writes a recommendation for a human and has no outward
+        effect. <span class="mono">execute_runbook</span> exists only so an attempt to act is
+        refused loudly and recorded, rather than failing silently somewhere less visible. No
+        tier touches a network element.</div>
+    </div>
+  </section>
+
+  <section class="blk">
+    <h2>What happens when the model is switched off</h2>
+    <div class="panel">
+      <p style="font-size:var(--f3);color:var(--t2);line-height:1.65">Every AI path has a
+        deterministic fallback, and the fallbacks are good: diagnosis reverts to rules that
+        score <strong style="color:var(--t1)">7 of 7</strong> on the labelled scenarios,
+        detection to rules that score <strong style="color:var(--t1)">1.00 precision and 1.00
+        recall</strong>, the digest to a rendered template, and the knowledge assistant to the
+        retrieved excerpt with its citation.</p>
+      <div class="msg ok">The product does not degrade from “AI” to “broken”. It degrades from
+        “AI” to “the rules”, and every screen records which path answered. That is not a
+        fallback anyone needs to apologise for — and it is why a model outage is an
+        inconvenience rather than an incident.</div>
+    </div>
+  </section>`;
+}
+
+/* ============================================================ diagrams */
+const SV = {
+  box(x, y, w, h, title, sub, tone) {
+    const fill = tone === "ai" ? "var(--a-bg)" : tone === "mute" ? "var(--c1)" : "var(--c0)";
+    const line = tone === "ai" ? "var(--a-line)" : "var(--c4)";
+    return `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="9" fill="${fill}"
+      stroke="${line}" stroke-width="1.5"/>
+      <text x="${x + w / 2}" y="${y + (sub ? 25 : h / 2 + 5)}" text-anchor="middle"
+        font-size="13.5" font-weight="650" fill="var(--t1)">${title}</text>` +
+      (sub ? `<text x="${x + w / 2}" y="${y + 43}" text-anchor="middle" font-size="11.5"
+        fill="var(--t3)">${sub}</text>` : "");
+  },
+  arrow(x1, y1, x2, y2, tone) {
+    return `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}"
+      stroke="${tone || "var(--c4)"}" stroke-width="1.8" marker-end="url(#tip)"/>`;
+  },
+  label(x, y, text, tone, anchor) {
+    return `<text x="${x}" y="${y}" text-anchor="${anchor || "start"}" font-size="11.5"
+      font-weight="650" fill="${tone || "var(--t3)"}">${text}</text>`;
+  },
+  defs: `<defs><marker id="tip" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="5.5"
+    markerHeight="5.5" orient="auto-start-reverse">
+    <path d="M0 0 L10 5 L0 10 z" fill="var(--c4)"/></marker></defs>`,
+};
+
+function dPipeline() {
+  const B = SV.box, A = SV.arrow, L = SV.label;
+  return `<svg viewBox="0 0 980 430" role="img"
+    aria-label="Source systems feed an ingestion boundary, then enrich, correlate, diagnose and prioritise; a human approves before any customer is contacted; every step writes an audit row">
+    ${SV.defs}
+    ${L(0, 14, "SOURCE SYSTEMS — READ-ONLY")}
+    ${B(0, 26, 200, 58, "Network", "KPIs · alarms · topology")}
+    ${B(216, 26, 200, 58, "Customer", "complaints · care calls")}
+    ${B(432, 26, 200, 58, "Reference", "HLR · CBS · maintenance")}
+
+    ${A(316, 92, 316, 122)}
+    ${B(130, 128, 372, 58, "Ingestion boundary", "validate · normalise · pseudonymise the MSISDN")}
+    ${A(316, 194, 316, 224)}
+
+    ${L(0, 218, "ONE PIPELINE, TWO ENTRY POINTS")}
+    ${B(0, 230, 172, 58, "Enrich", "site · region · segment")}
+    ${A(172, 259, 198, 259)}
+    ${B(202, 230, 186, 58, "Correlate", "eleven rules")}
+    ${A(388, 259, 414, 259)}
+    ${B(418, 230, 172, 58, "Incident", "one fault, many cells")}
+    ${A(590, 259, 616, 259)}
+    ${B(620, 230, 186, 58, "Diagnose", "rules, then a model", "ai")}
+    ${A(806, 259, 832, 259)}
+    ${B(836, 230, 144, 58, "Prioritise", "weighted rule")}
+
+    ${A(908, 288, 908, 318)}
+    ${B(740, 324, 240, 58, "Human approval", "the only path to a customer")}
+    ${A(740, 353, 714, 353)}
+    ${B(486, 324, 224, 58, "Notify &amp; report", "approved template · digest")}
+
+    <rect x="0" y="324" width="420" height="58" rx="9" fill="var(--c1)" stroke="var(--c4)"
+      stroke-width="1.5" stroke-dasharray="5 4"/>
+    <text x="210" y="349" text-anchor="middle" font-size="13.5" font-weight="650"
+      fill="var(--t2)">Every step writes an audit row</text>
+    <text x="210" y="367" text-anchor="middle" font-size="11.5" fill="var(--t3)">
+      actor · inputs · rule version · evidence</text>
+
+    ${L(0, 414, "Network-first: a degradation raises an incident whether or not anybody complained.", "var(--t3)")}
+  </svg>`;
+}
+
+function dGate() {
+  const B = SV.box, A = SV.arrow, L = SV.label;
+  return `<svg viewBox="0 0 980 260" role="img"
+    aria-label="The deterministic rules run first; above the certainty floor the model is never called, otherwise a bounded agent answers and its output is schema and citation checked">
+    ${SV.defs}
+    ${B(0, 98, 168, 58, "Incident", "with its evidence")}
+    ${A(168, 127, 198, 127)}
+    ${B(202, 98, 196, 58, "Deterministic rules", "ordered by conclusiveness")}
+
+    ${A(398, 112, 462, 58, "var(--ok)")}
+    ${L(404, 82, "certain", "var(--ok)")}
+    ${B(466, 24, 250, 58, "Answered — no model called", "free · instant · cannot hallucinate")}
+    ${A(716, 53, 746, 53)}
+    ${B(750, 24, 230, 58, "Recorded as method", "rules, on every decision", "mute")}
+
+    ${A(398, 142, 462, 196, "var(--a)")}
+    ${L(404, 186, "not certain", "var(--a)")}
+    ${B(466, 168, 250, 58, "Bounded agent + model", "typed tools · steps · budget", "ai")}
+    ${A(716, 197, 746, 197)}
+    ${B(750, 168, 230, 58, "Schema + citation check", "invalid → repair → the rules", "mute")}
+  </svg>`;
+}
+
+function dLayers() {
+  const rows = [
+    ["Interface", "Next.js console · 15 FastAPI routers, 58 routes · every request re-checks authorisation server-side", "var(--c0)"],
+    ["Infrastructure", "adapters: Oracle, the LLM gateway, Teams, SMS · each with a mock and a live stub", "var(--c0)"],
+    ["AI", "one model gateway · three agents · the ML registry — no other component may hold an HTTP client to a model", "var(--a-bg)"],
+    ["Modules", "16 business modules that never import one another — they share ports and events only", "var(--c0)"],
+    ["Core", "settings · clock · security · errors · audit — the only place that reads the environment", "var(--c0)"],
+    ["Domain", "24 events · 16 lifecycle states · pure: no database, no HTTP, no framework, no clock", "var(--c1)"],
+  ];
+  return `<svg viewBox="0 0 980 ${rows.length * 56 + 34}" role="img"
+    aria-label="Six layers with dependencies pointing inward, from the interface down to a pure domain">
+    <defs><marker id="dn" viewBox="0 0 10 10" refX="5" refY="9" markerWidth="5" markerHeight="5"
+      orient="auto"><path d="M0 0 L10 0 L5 10 z" fill="var(--c4)"/></marker></defs>
+    ${rows.map(([t, s, fill], k) => {
+      const y = k * 56;
+      return `<rect x="34" y="${y}" width="946" height="48" rx="9" fill="${fill}"
+        stroke="${fill === "var(--a-bg)" ? "var(--a-line)" : "var(--c4)"}" stroke-width="1.5"/>
+        <text x="50" y="${y + 20}" font-size="13.5" font-weight="700" fill="var(--t1)">${t}</text>
+        <text x="50" y="${y + 37}" font-size="11.5" fill="var(--t3)">${s}</text>`;
+    }).join("")}
+    <line x1="14" y1="6" x2="14" y2="${rows.length * 56 - 16}" stroke="var(--c4)"
+      stroke-width="1.8" marker-end="url(#dn)"/>
+    <text x="8" y="${rows.length * 56 + 26}" font-size="11.5" font-weight="650"
+      fill="var(--t3)">dependencies point inward</text>
+  </svg>`;
+}
+
+/* ====================================================== WHAT THIS IS */
+function vHow() {
+  const a = D.arch;
+  return `
+  ${hero("Overview", "What TAZAMA is, and how it works",
+    "Readable end to end in about ten minutes, by someone who does not work on it.")}
+
+  <section class="blk">
+    <div class="panel">
+      <p style="font-size:var(--f5);line-height:1.45;font-weight:560;letter-spacing:-.012em">
+        TAZAMA connects what the network already knows to what customers are already saying,
+        so the operator finds out about a fault from its own data instead of from the queue at
+        the contact centre.</p>
+    </div>
+  </section>
+
+  <section class="blk prose">
+    <h2>The problem</h2>
+    <p>Today a network fault becomes a customer problem before anyone in the NOC knows it is a
+      fault. The network's own data saw it first — a cell's availability dropped, an alarm
+      fired — but nobody connected that to the forty people now calling to complain. Those two
+      facts live in different systems, owned by different teams, and nothing joins them.</p>
+    <p>So three things go wrong at once. The customer finds out their service is broken by
+      trying to use it, then waits on hold to be told something the operator already knew. The
+      engineer spends the first hour assembling context — which cells, how many subscribers, is
+      there maintenance, has this happened before — instead of fixing anything. And the contact
+      centre absorbs thousands of calls that existed only because nobody was told.</p>
+    <p class="big"><strong>That gap is the whole product.</strong> Everything else follows from
+      closing it.</p>
+  </section>
+
+  <section class="blk">
+    <h2>What it does, in order</h2>
+    <p class="lede">A complaint arrives, or a cell starts behaving unusually. Either way the same pipeline runs.</p>
+    <figure>${dPipeline()}
+      <figcaption>The shaded step is the only place a language model is involved at all, and
+        the human-approval gate is the only path to a customer.</figcaption></figure>
+  </section>
+
+  <section class="blk">
+    <h2>Correlation is the heart of it</h2>
+    <p class="lede">One engine, two entry points, eleven rules — and the rules are the product's
+      actual intellectual property.</p>
+    <div class="panel">
+      <div class="cols c2" style="margin-bottom:var(--s4)">
+        <div><h4 style="font-size:var(--f1);text-transform:uppercase;letter-spacing:.06em;
+          color:var(--t3);margin-bottom:var(--s2)">Network-first</h4>
+          <p style="font-size:var(--f2);color:var(--t2)">Scans KPI health, collapses alarm
+            storms, walks the topology and raises incidents <strong>whether or not anybody
+            complained</strong>. Complaints are confirmation, not a precondition.</p></div>
+        <div><h4 style="font-size:var(--f1);text-transform:uppercase;letter-spacing:.06em;
+          color:var(--t3);margin-bottom:var(--s2)">Customer-first</h4>
+          <p style="font-size:var(--f2);color:var(--t2)">A located complaint joins the incident
+            covering its event time, or — with enough corroborated company — starts one.</p></div>
+      </div>
+      <div class="scroll"><table><caption>The eleven correlation rules, and why each exists</caption>
+        <thead><tr><th style="width:4%" class="num">#</th><th style="width:24%">Rule</th>
+          <th>Why it exists</th></tr></thead>
+        <tbody>${D.rules.map(([r, w], k) => `<tr><td class="num mut">${k + 1}</td>
+          <td><strong>${r}</strong></td><td>${w}</td></tr>`).join("")}</tbody></table></div>
+      <div class="msg in"><strong>Two of these are the ones nobody expects.</strong>
+        <em>Silent sufferers</em> raises an incident from KPI degradation with zero complaints —
+        the outage nobody reported. <em>Silence as signal</em> treats a complaint rate
+        <em>collapsing</em> against a cell's own baseline, while KPIs collapse, as evidence of
+        an outage rather than of health — the outage so complete it silenced the channel. A
+        complaints-only system is blind to both by construction.</div>
+    </div>
+  </section>
+
+  <section class="blk">
+    <h2>Where the AI actually comes in</h2>
+    <p class="lede">Worth being precise about, because “AI platform” does a lot of work in most
+      product descriptions. There are three kinds of intelligence here and they are not the
+      same thing.</p>
+    <div class="cols c3">
+      <div class="panel"><h4 style="color:var(--t1);font-size:var(--f2);text-transform:none;
+        letter-spacing:0">1 &middot; Rules and statistics</h4>
+        <p style="font-size:var(--f2);color:var(--t2);margin-top:var(--s2)">The load-bearing
+          part. Correlation, prioritisation, anomaly detection and most diagnosis are
+          deterministic — explainable, instant, free, and impossible to argue into a different
+          answer by the wording of a complaint. On the labelled scenarios: <strong>1.00
+          precision and 1.00 recall</strong> on detection, <strong>7 of 7</strong> on
+          diagnosis.</p></div>
+      <div class="panel"><h4 style="color:var(--t1);font-size:var(--f2);text-transform:none;
+        letter-spacing:0">2 &middot; Machine learning</h4>
+        <p style="font-size:var(--f2);color:var(--t2);margin-top:var(--s2)">Where a pattern
+          beats a rule. A gradient-boosted model forecasts complaint volume an hour ahead per
+          region, beating a seasonal-naive baseline by <strong>15.7%</strong> on held-out data
+          in time order. Anomaly detection compares every cell to its own history at that hour
+          of that weekday.</p></div>
+      <div class="panel"><h4 style="color:var(--t1);font-size:var(--f2);text-transform:none;
+        letter-spacing:0">3 &middot; Agents and generative AI</h4>
+        <p style="font-size:var(--f2);color:var(--t2);margin-top:var(--s2)">Narrow, bounded,
+          never in control. Three agents: one explains an ambiguous incident, one answers from
+          the written procedures or declines, one drafts digest prose. Typed tools, permission
+          tiers, hard budgets, and every output schema-validated before it is shown.</p></div>
+    </div>
+    <div class="msg wn"><strong>The rule that makes the rest safe: AI recommends, rules decide,
+      humans approve.</strong> No language model executes a runbook, writes a network command,
+      sends a customer message, or sees a raw phone number. Models fill slots in approved
+      templates; they do not write free text to customers.</div>
+    <figure>${dGate()}
+      <figcaption>Above the certainty floor the model is never called — which is also what
+        makes its contribution measurable, because every decision records which path
+        answered.</figcaption></figure>
+  </section>
+
+  <section class="blk">
+    <h2>Telling a customer is a sequence of refusals</h2>
+    <p class="lede">The value is telling someone before they call. The risk is telling two
+      million people something wrong at 03:00. So the path out is narrow.</p>
+    <div class="panel">
+      <div class="scroll"><table><caption>The gates a proactive notification must pass</caption>
+        <thead><tr><th style="width:4%" class="num">#</th><th style="width:26%">Gate</th>
+          <th>What it does</th></tr></thead>
+        <tbody>${D.gates.map(([g, w], k) => `<tr><td class="num mut">${k + 1}</td>
+          <td><strong>${g}</strong></td><td>${w}</td></tr>`).join("")}</tbody></table></div>
+      <div class="msg"><strong>Every refusal is audited.</strong> A blocked message publishes a
+        suppression event and writes a decision row — a message that was <em>not</em> sent is as
+        auditable as one that was. Separation of duties is enforced in code, not policy: where
+        the rule names two approvers, the proposer cannot approve their own proposal.</div>
+    </div>
+  </section>
+
+  <section class="blk">
+    <h2>How it is built</h2>
+    <p class="lede">A modular monolith with hard internal seams: one deployable unit, so it is
+      simple to run; strict boundaries, so any piece can be lifted out later.</p>
+    <div class="metrow cols c4" style="margin-bottom:var(--s5)">
+      ${met("Modules", a.modules, "none may import another", true)}
+      ${met("Domain events", a.events, "versioned, additive only", true)}
+      ${met("Lifecycle states", a.states, "declared in one place", true)}
+      ${met("Port interfaces", a.ports, "across the modules", true)}
+    </div>
+    <figure>${dLayers()}
+      <figcaption>The domain at the bottom knows nothing about databases, HTTP or frameworks —
+        which is why its logic is testable without any of them. Five automated contracts enforce
+        this on every commit.</figcaption></figure>
+    <div class="prose">
+      <p>Two details that matter more than they sound. Domain events are written in the
+        <strong>same database transaction</strong> as the state change they describe, then
+        dispatched by a separate worker — so a crash mid-pipeline loses nothing and any incident
+        can be replayed deterministically. And every external system, including the model
+        endpoint, sits behind an interface with both a mock and a live stub, so the whole
+        product runs and is tested with nothing switched on.</p>
+    </div>
+  </section>
+
+  <section class="blk">
+    <h2>Why these algorithms</h2>
+    <p class="lede">Each choice, and the obvious alternative it was chosen over.</p>
+    <div class="panel"><div class="scroll"><table>
+      <caption class="sr">Algorithm choices with rationale</caption>
+      <thead><tr><th style="width:17%">Decision</th><th style="width:25%">Chosen</th>
+        <th>Why, and over what</th></tr></thead><tbody>
+      <tr><td><strong>Grouping</strong></td><td>Rule-based clustering over place, time and
+        symptom, joined through the topology</td>
+        <td>Over a learned clustering model. An engineer must defend the grouping at 3am. “They
+          share an upstream node and the alarm is on that node” is a sentence pointing at a row;
+          a distance metric is not an answer anyone can act on.</td></tr>
+      <tr><td><strong>Diagnosis</strong></td><td>Rules first, model only for the ambiguous
+        remainder</td>
+        <td>Over a model-first pipeline. A rule that is certain is a <em>better</em> answer than
+          a model that agrees with it. Ordering rules by how conclusive each signal is encodes
+          real operational knowledge — planned maintenance explains an incident completely, so
+          it is checked first.</td></tr>
+      <tr><td><strong>Priority</strong></td><td>Transparent weighted rule storing each factor's
+        contribution</td>
+        <td>Over a trained ranker. A P1 must be defensible months later in a disagreement.
+          “Subscribers contributed 0.4, SLA risk 0.3” is a conversation; a ranker's score is
+          not.</td></tr>
+      <tr><td><strong>Anomalies</strong></td><td>Robust z-score against each cell's own
+        hour-of-week baseline, using the median</td>
+        <td>Over a fixed threshold, which cannot tell a cell that is always busy at 8pm from one
+          that has just broken. And over mean-and-standard-deviation, because one catastrophic
+          hour drags both — the fault inflates the baseline it should be measured
+          against.</td></tr>
+      <tr><td><strong>Forecast</strong></td><td>Gradient boosting, Poisson objective, region-hour
+        grain</td>
+        <td>Over deep learning: the data is tabular and modest, and boosting is stronger on that
+          shape while staying attributable. Over absolute error: see below — it produced a model
+          that predicted zero forever.</td></tr>
+      <tr><td><strong>Complaint text</strong></td><td>Deterministic multilingual lexicon —
+        English, Swahili, Sheng, code-switched</td>
+        <td>Over a trained classifier or an LLM as the primary path. Inspectable, instant, free,
+          and its accuracy is <em>known</em>: 69.1% exact, 76.2% network-versus-not, 30% sent to
+          a human.</td></tr>
+      <tr><td><strong>Ask in English</strong></td><td>The model writes SQL, a human reads it, the
+        existing guard executes it</td>
+        <td>Over letting the model query directly. The dangerous failure is not a destructive
+          statement — the schema and guard stop those — it is a query that is valid, permitted
+          and subtly wrong.</td></tr>
+      <tr><td><strong>Knowledge</strong></td><td>Keyword search with expiry filtering and
+        mandatory citations</td>
+        <td>Over a vector index and reranker, which is machinery without a problem at a few dozen
+          documents. What makes an answer safe is citation integrity: an answer citing a document
+          never retrieved is rejected, expired procedures are never returned, and no retrieval
+          means no answer.</td></tr>
+    </tbody></table></div></div>
+  </section>
+
+  <section class="blk prose">
+    <h2>The mistake worth telling you about</h2>
+    <p>The first version of the forecast used absolute error as its objective and
+      <strong>beat the baseline by 40%</strong>. It was worthless. The target is complaints per
+      thousand subscribers per cell-hour, which is <strong>97.6% zeros</strong>, and the optimum
+      of absolute error on a mostly-zero series is zero. The model had correctly learned to
+      predict nothing at all, scored brilliantly, and beat an honest baseline that carries last
+      week's spikes forward.</p>
+    <p>The tell was visible the whole time: every feature attribution printed as
+      <span class="mono">0.00000</span>. A model with four hundred trees and zero attribution is
+      a model whose output does not depend on its input. The fix was a Poisson objective, which
+      cannot collapse that way, and moving to region grain where only 16.7% of rows are zero —
+      which is also the right unit on the merits, because care is staffed per region, never per
+      cell.</p>
+    <div class="msg ok wide">The gate now requires three things together: beat the baseline
+      overall, have non-zero variance in the predictions, <em>and</em> beat the baseline on rows
+      where demand actually occurred. The current model passes all three. This is the kind of
+      failure that ships quietly in most projects, and the reason the gates read the way they
+      do.</div>
+  </section>
+
+  <section class="blk">
+    <h2>Security, in nine layers</h2>
+    <p class="lede">Each is a built control with tests, not a policy statement.</p>
+    <div class="panel"><div class="cols c2">
+      <ol style="margin:0;padding-left:20px;color:var(--t2);font-size:var(--f2)">
+        <li style="margin:7px 0"><strong>Input validation</strong> at every boundary — typed schemas, bounds, allowlists.</li>
+        <li style="margin:7px 0"><strong>Prompt-injection guard</strong> — customer text is data, never instruction: delimited, pattern-checked, with a canary token that detects a leaked system prompt. Tool access is never derived from text.</li>
+        <li style="margin:7px 0"><strong>Rate limiting</strong> per user, per agent, per tool and per model call.</li>
+        <li style="margin:7px 0"><strong>Typed tool registry</strong> with permission tiers, timeouts and budgets.</li>
+        <li style="margin:7px 0"><strong>SQL guard</strong> — syntax-tree parsing, table allowlist, mandatory row cap and timeout.</li>
+      </ol>
+      <ol start="6" style="margin:0;padding-left:20px;color:var(--t2);font-size:var(--f2)">
+        <li style="margin:7px 0"><strong>Identifier masking</strong> before the model, the logs, Teams, and any export.</li>
+        <li style="margin:7px 0"><strong>Output sanitisation</strong> — scripts stripped, identifier and canary leakage detected, length capped.</li>
+        <li style="margin:7px 0"><strong>Append-only audit</strong> of every decision and AI output, with actor, inputs, rule or prompt version, confidence and evidence.</li>
+        <li style="margin:7px 0"><strong>Human oversight</strong> — AI recommends, rules decide, humans approve. No AI side effects.</li>
+      </ol></div>
+      <div class="msg">Alongside those: role-based access re-checked server-side on every request
+        across <strong>${a.caps} capabilities and ${a.roles} roles</strong>, object-level checks
+        so one user cannot read another's record by changing an identifier, a CORS allowlist and
+        security headers from configuration, secrets only in the environment with an automated
+        scan in the commit hook and the build, non-root containers, pinned dependency locks,
+        vulnerability audits, a software bill of materials, and a written threat model.</div>
+    </div>
+  </section>
+
+  <section class="blk prose">
+    <h2>What is honest about the current state</h2>
+    <ul>
+      <li><strong>All data is synthetic.</strong> Shaped to look like a Kenyan mobile network —
+        regions, technologies, Swahili and Sheng complaint text, enterprise accounts — and
+        generated from a fixed seed so every number is reproducible. No real system, customer or
+        network element is represented anywhere.</li>
+      <li><strong>Accuracy measured on synthetic data describes the mechanism, not the
+        capability.</strong> The 1.00/1.00 detection score says the rules do what they were
+        designed to do on labelled cases. It does not predict performance on real traffic, and
+        nobody should present it as if it did.</li>
+      <li><strong>The lead-lag analysis finds nothing on this data</strong> — and says so, with
+        its reasons. That is the correct behaviour and it is worth showing.</li>
+      <li><strong>Text-to-SQL accuracy is unmeasured.</strong> Its safety is structural and
+        tested; its usefulness cannot be measured until real questions are asked of real
+        data.</li>
+      <li><strong>The agents are not in the automated pipeline.</strong> They are available on
+        demand from the console. An agent in the pipeline would spend model budget on every
+        incident, which is not yet justified.</li>
+    </ul>
+    <div class="msg in wide"><strong>Why this section exists.</strong> A network team will find
+      the limits in the first week. Naming them now is the difference between a credible system
+      and a demo — and every limit above has a measurement or a test behind it, which is why it
+      can be stated this precisely.</div>
+  </section>`;
+}
+
+/* ========================================================== GOING LIVE */
+function vLive() {
+  return `
+  ${hero("Going live", "What it takes to point this at real systems",
+    "In order, with what is deliberately not built yet.")}
+
+  <section class="blk">
+    <h2>Where the project stands</h2>
+    <div class="panel">
+      <div class="scroll"><table><caption class="sr">Automated gates</caption>
+        <thead><tr><th style="width:44%">Gate</th><th>Result</th></tr></thead>
+        <tbody>${D.gatesCI.map(([k, v]) => `<tr><td>${k}</td><td>${E(v)}</td></tr>`).join("")}
+        </tbody></table></div>
+      <div class="msg ok"><strong>The architecture, pipeline, console, security controls and AI
+        surface are built and tested.</strong> The remaining engineering work to reach a pilot is
+        configuration and data access, not construction — plus three privacy procedures that
+        genuinely block real subscriber records.</div>
+    </div>
+  </section>
+
+  <section class="blk">
+    <h2>Step one &middot; the data, and from whom</h2>
+    <p class="lede">Ten entities. Switching demo to live is a configuration edit, not a code change.</p>
+    <div class="panel">
+      <p style="font-size:var(--f2);color:var(--t2);margin-bottom:var(--s4)">Real table and
+        column names live in exactly one file, validated at startup. Nothing in the code knows a
+        source table's name, so connecting a real system means describing it there — and a wrong
+        description fails loudly on boot rather than producing quiet nonsense.</p>
+      <div class="scroll"><table><caption>Source entities and the system each comes from</caption>
+        <thead><tr><th>Entity</th><th>What it is</th><th>Likely system</th><th>Fields needed</th></tr></thead>
+        <tbody>${D.src.map(([e, w, s, f]) => `<tr><td class="mono">${e}</td><td>${w}</td>
+          <td>${s}</td><td class="mut">${f}</td></tr>`).join("")}</tbody></table></div>
+      <div class="msg"><strong>Read-only, and enforced.</strong> In live mode source reads are
+        read-only, writes are restricted to the application's own schema, and the switch that
+        would permit anything else defaults to off and must be deliberately flipped. The
+        application never writes to a system of record.</div>
+      <div class="msg in"><strong>On location data.</strong> What is needed is the operator's own
+        cell and site coordinates from the planning tool, plus the serving-cell identifier on a
+        complaint — not a third-party mapping service, and not a customer's device location. Map
+        tiles are the only external thing, configured by URL, and the console is tested to work
+        with no tile server at all. There is no requirement for Google location data, and
+        introducing it would add a privacy obligation the product does not currently have.</div>
+    </div>
+  </section>
+
+  <section class="blk">
+    <h2>Step two &middot; three procedures that block real subscriber data</h2>
+    <p class="lede">Obligations under the Kenya Data Protection Act, not technical debt. Days of
+      work, not months.</p>
+    <div class="panel"><ol style="margin:0;padding-left:20px;color:var(--t2);font-size:var(--f2)">
+      <li style="margin:var(--s3) 0"><strong>Erasure.</strong> Deleting a subscriber's token must
+        cascade to their complaints, care calls, incident links and anything derived from them.
+        The token is already the single identity across every table, so this is one procedure
+        rather than a hunt — but it has to be written and tested before a real record
+        exists.</li>
+      <li style="margin:var(--s3) 0"><strong>Salt rotation.</strong> Rotating the pseudonymisation
+        salt silently breaks the link between historical analytics and current subscribers. The
+        policy decision — re-key the history, or accept the break and archive it — belongs to the
+        data owner, and must be made before the first rotation rather than during it.</li>
+      <li style="margin:var(--s3) 0"><strong>A minimum-exposure floor on insights.</strong> A
+        complaint rate for a twelve-subscriber cell at 03:00 is close to identifying. The
+        analysis aggregates and carries caveats, but has no floor below which a cell is not
+        reported individually. Agreeing that floor is a short conversation; applying it is a
+        small change.</li>
+    </ol></div>
+  </section>
+
+  <section class="blk">
+    <h2>Step three &middot; operational completeness</h2>
+    <div class="panel"><div class="cols c2">
+      <div><h4 style="color:var(--t1);font-size:var(--f2);text-transform:none;letter-spacing:0">Scheduled Teams delivery</h4>
+        <p style="font-size:var(--f2);color:var(--t2);margin-top:4px">The schedule is written and
+          tested; what is missing is a provisioned webhook. Send one test card, confirm the
+          payload, enable the scheduler.</p>
+        <h4 style="color:var(--t1);font-size:var(--f2);text-transform:none;letter-spacing:0;margin-top:var(--s4)">A real-model evaluation</h4>
+        <p style="font-size:var(--f2);color:var(--t2);margin-top:4px">Every current AI threshold
+          was measured against a deterministic local stand-in. Pointing at an internal model
+          endpoint is a configuration change; expect worse numbers and expect the fallbacks to
+          matter more than they appear to today.</p></div>
+      <div><h4 style="color:var(--t1);font-size:var(--f2);text-transform:none;letter-spacing:0">A load figure</h4>
+        <p style="font-size:var(--f2);color:var(--t2);margin-top:4px">The load test exists and has
+          not been run. There is no measured p99 for the incident list, and there should be one
+          before a pilot rather than after someone notices.</p>
+        <h4 style="color:var(--t1);font-size:var(--f2);text-transform:none;letter-spacing:0;margin-top:var(--s4)">An audit-review routine</h4>
+        <p style="font-size:var(--f2);color:var(--t2);margin-top:4px">The audit log is append-only
+          and complete, and nobody reads it. A log nobody reads is evidence after the fact, not a
+          control — care lookups in particular need a cadence and an owner.</p></div>
+    </div></div>
+  </section>
+
+  <section class="blk">
+    <h2>The biggest opportunity &middot; predictive maintenance</h2>
+    <p class="lede">Today the product detects a fault early. Predicting one is a different
+      capability, and it needs telemetry this demo does not have.</p>
+    <div class="panel">
+      <p style="font-size:var(--f2);color:var(--t2)">Be precise about the difference, because it
+        is where this conversation usually goes wrong. TAZAMA currently catches a degradation
+        from KPIs and alarms and connects it to customer impact — that is <em>early
+        detection</em>. Predicting a failure before it occurs needs the sensor streams that
+        describe a component wearing out, and those streams are not in the KPI feed the product
+        reads today.</p>
+      <div class="msg">What already exists and would carry this: the per-cell hour-of-week
+        baseline, the topology and failure-domain model, and the impact calculation that can
+        quantify what a predicted failure <em>would</em> cost. The method is the same in every
+        case — establish what normal looks like for that specific component, then flag departure
+        from it.</div>
+    </div>
+
+    ${[["Power and generator degradation",
+        "Mains power cuts, the backup battery drains faster than anyone expected, and the site goes dark with no warning.",
+        "Track the voltage discharge curve and fuel-level telemetry per site. When a battery drains faster than its own historical curve for that load, raise a battery-health warning hours before the outage, so a crew refuels or swaps the unit first.",
+        "A site power and environment feed — rectifier voltage, battery discharge, fuel level, door and temperature alarms. <strong>Start here.</strong> Single source, the existing baseline transfers directly to a discharge curve, and the outcome is trivially verifiable: the site either went dark or it did not."],
+       ["Optical backhaul degradation",
+        "Transceivers accumulate heat, dust and micro-bends over weeks until the link fails outright, taking every cell beneath it down at once.",
+        "Ingest bit error rate and frame-error counters per link. When errors climb above that link's own weekly baseline, flag transceiver wear days before failure — a planned swap in a maintenance window instead of an emergency at 2am.",
+        "Transport-layer counters, which usually live in a different system from the radio KPIs. This fits well: the topology model already knows which cells share a failure domain, so a degrading link maps onto the cells it would take down and the impact of a <em>predicted</em> failure can be costed before it happens."],
+       ["Antenna tilt and RF misalignment",
+        "Wind or a structural shift tilts an antenna, coverage shrinks, adjacent cells absorb the load, and the first clear signal is a rise in complaints.",
+        "Watch handover success rate and signal quality per sector. A sustained one-sided drop on a single sector, while its neighbours are unchanged, points at physical misalignment — identifying it without sending somebody to climb the tower first.",
+        "Per-sector handover and signal-quality KPIs with neighbour relations, plus a longer history than the current 336-hour window. The hardest of the three to make trustworthy, because slow drift is easy to confuse with a changing traffic pattern — so the honest way to build it is to measure how often the pattern precedes a confirmed tilt, and ship nothing until that number exists."]]
+      .map(([t, today, withIt, needs], k) => `
+      <div class="panel"><h3 style="font-size:var(--f4);margin-bottom:var(--s3)">${k + 1}. ${t}</h3>
+        <dl class="kv" style="grid-template-columns:120px 1fr">
+          <dt>Today</dt><dd style="font-weight:400;color:var(--t2)">${today}</dd>
+          <dt>With this</dt><dd style="font-weight:400;color:var(--t2)">${withIt}</dd>
+          <dt>What it needs</dt><dd style="font-weight:400;color:var(--t2)">${needs}</dd></dl></div>`).join("")}
+
+    <div class="msg wn"><strong>How to talk about this.</strong> All three are credible and none
+      is built. The forecast, the anomaly detector and the topology model are the foundations
+      they would stand on. What is missing is telemetry, and obtaining it is a data-access
+      conversation with the network team rather than a modelling problem.</div>
+  </section>
+
+  <section class="blk">
+    <h2>Other techniques worth evaluating</h2>
+    <div class="panel"><div class="scroll"><table>
+      <caption>Candidates, what each would add, and what it would cost</caption>
+      <thead><tr><th style="width:22%">Technique</th><th>What it would add</th>
+        <th style="width:32%">The catch</th></tr></thead><tbody>
+      <tr><td><strong>Topic modelling</strong> (LDA or LSA)</td>
+        <td>Discovering complaint themes nobody wrote a rule for. The lexicon can only find
+          categories someone thought of in advance; topic modelling over a month of real
+          complaints would surface clusters never anticipated — a handset model, a tariff change,
+          a specific app.</td>
+        <td>Exploratory, not operational: topics are unlabelled and drift, so a person must read
+          and name them. The right use is <em>discovering</em> categories to add to the lexicon,
+          not classifying live traffic. It also needs real text in volume — synthetic complaints
+          come from templates, so it would only rediscover those templates.</td></tr>
+      <tr><td><strong>Sentence embeddings</strong></td>
+        <td>Grouping complaints that mean the same thing in different words, across English,
+          Swahili and Sheng, without maintaining phrase lists.</td>
+        <td>Loses the inspectability the lexicon has, and needs a multilingual model that
+          genuinely handles Sheng. Measurable today against the lexicon's own labels, which makes
+          it a cheap experiment rather than a leap.</td></tr>
+      <tr><td><strong>Graph neural network</strong></td>
+        <td>Learning how faults propagate through the topology instead of following it by
+          rule.</td>
+        <td>Built and deliberately switched off. The rules score 1.00/1.00 on the labelled
+          scenarios, so there is nothing to beat, and it would trade an explainable grouping for
+          an embedding.</td></tr>
+      <tr><td><strong>Survival analysis</strong></td>
+        <td>The natural fit for predictive maintenance: estimating a component's remaining life
+          rather than flagging an anomaly in it.</td>
+        <td>Needs a history of actual failures with timestamps and the replacement record for
+          each. That lives in maintenance systems, not KPI feeds — until it is available this is
+          not implementable at all.</td></tr>
+      <tr><td><strong>Contextual bandit</strong></td>
+        <td>Learning when a proactive message best prevents a call.</td>
+        <td>Built and switched off, and the blocker is not technical: a bandit learns by
+          exploring, and exploring here means deliberately messaging real customers at worse
+          times. A consent conversation before an engineering task.</td></tr>
+    </tbody></table></div>
+    <div class="msg"><strong>The pattern behind all of these.</strong> Start with the simplest
+      thing that could work, measure it honestly on data it has not seen, and only then add a
+      model — and only if it beats that baseline on the metric that matters. Keep the baseline
+      running underneath as the fallback. Record which path answered, on every decision.</div>
+    </div>
+  </section>
+
+  <section class="blk">
+    <h2>Explicitly not planned</h2>
+    <div class="panel"><div class="scroll"><table>
+      <caption class="sr">Deliberate exclusions</caption>
+      <thead><tr><th style="width:34%">Not planned</th><th>Why not</th></tr></thead><tbody>
+      <tr><td><strong>Autonomous remediation</strong></td><td>The absence of any execution path is
+        a feature, and the clearest safety story this product has. It should stay absent.</td></tr>
+      <tr><td><strong>A model writing customer messages</strong></td><td>Approved templates with
+        slots, always. A model may fill a slot; it may not write prose to a customer, and the
+        schema rejects prose in a slot.</td></tr>
+      <tr><td><strong>Reinforcement learning on the live network</strong></td><td>No. Learning by
+        acting on a production network is not an acceptable way to learn.</td></tr>
+      <tr><td><strong>A general-purpose chatbot over the data</strong></td><td>The Explorer with an
+        approval step covers the need. An open chat invites questions the system cannot answer
+        safely and makes the boundary impossible to explain.</td></tr>
+    </tbody></table></div></div>
+  </section>`;
+}
+
+/* ================================================================ router
+   Each view names the capability the real console gates it on, so changing
+   role here hides exactly what it hides in the application. */
+const VIEWS = [
+  { id:"how",        label:"What this is",   grp:"Understand", cap:null,                v:vHow },
+  { id:"home",       label:"Command Center", grp:"Operate",    cap:"incident:read",     v:vHome },
+  { id:"incident",   label:"Incident card",  grp:"Operate",    cap:"incident:read",     v:vIncident },
+  { id:"complaints", label:"Complaints",     grp:"Operate",    cap:"complaint:read",    v:vComplaints },
+  { id:"care",       label:"Care lookup",    grp:"Operate",    cap:"subscriber:lookup", v:vCare },
+  { id:"explorer",   label:"Data Explorer",  grp:"Analyse",    cap:"explorer:query",    v:vExplorer },
+  { id:"insights",   label:"Insights",       grp:"Analyse",    cap:"insights:read",     v:vInsights },
+  { id:"reports",    label:"Reports",        grp:"Analyse",    cap:"report:read",       v:vReports },
+  { id:"ai",         label:"AI quality",     grp:"Analyse",    cap:"ai:ask",            v:vAi },
+  { id:"live",       label:"Going live",     grp:"Roadmap",    cap:null,                v:vLive },
+];
+
+let view = "how";
+let role = "admin";
+
+const may = (p) => p.cap === null || CAPS[role].includes(p.cap);
+
+function paintNav() {
+  const open = VIEWS.filter(may);
+  let html = "", seen = null;
+  for (const p of open) {
+    if (p.grp !== seen) { html += `<div class="grp">${p.grp}</div>`; seen = p.grp; }
+    html += `<button type="button" data-tab="${p.id}"
+      ${p.id === view ? 'aria-current="page"' : ""}><span class="dot"></span>${p.label}</button>`;
+  }
+  document.getElementById("nav").innerHTML = html;
+}
+
+function paint(animate) {
+  let p = VIEWS.find((x) => x.id === view);
+  if (!p || !may(p)) { view = VIEWS.filter(may)[0].id; p = VIEWS.find((x) => x.id === view); }
+  paintNav();
+  const main = document.getElementById("main");
+  main.className = animate === false ? "" : "anim";
+  main.innerHTML = p.v();
+  if (animate !== false) window.scrollTo({ top: 0, behavior: "instant" });
+}
+
+const go = (id) => { view = id; paint(); };
+
+/* Re-render only the main region without the entrance animation, for
+   in-place interactions where a replay would read as a flicker. */
+const repaint = () => paint(false);
+
+/* ============================================================== events */
+document.addEventListener("click", (ev) => {
+  const t = ev.target;
+  const hit = (sel) => t.closest(sel);
+
+  const tab = hit("[data-tab]");
+  if (tab) return go(tab.dataset.tab);
+
+  const back = hit("[data-goto]");
+  if (back) { ev.preventDefault(); return go(back.dataset.goto); }
+
+  const row = hit("[data-incident]");
+  if (row) { S.incident = row.dataset.incident; return go("incident"); }
+
+  const reg = hit("[data-region]");
+  if (reg) { S.region = reg.dataset.region; return repaint(); }
+
+  const lag = hit("[data-lag]");
+  if (lag) { S.lag = Number(lag.dataset.lag); return repaint(); }
+
+  const ask = hit("[data-ask]");
+  if (ask) { S.asked = ask.dataset.ask; return repaint(); }
+
+  if (t.id === "theme") {
+    const root = document.documentElement;
+    const dark = root.getAttribute("data-theme") === "dark";
+    root.setAttribute("data-theme", dark ? "light" : "dark");
+    return;
+  }
+
+  if (t.id === "diagnose") {
+    t.disabled = true;
+    t.textContent = "Running…";
+    // A short pause: a panel that appears instantly reads as pre-baked
+    // rather than computed, and the real call does take a moment.
+    window.setTimeout(() => {
+      S.diagnosed[S.incident] = true;
+      repaint();
+    }, 430);
+    return;
+  }
+
+  if (t.id === "use") {
+    S.ranSql = D.sql.gen;
+    S.ran = null;
+    repaint();
+    const box = document.getElementById("sqlbox");
+    if (box) { box.value = D.sql.gen; box.focus(); }
+    return;
+  }
+
+  if (t.id === "run") {
+    const box = document.getElementById("sqlbox");
+    S.ranSql = box ? box.value : "";
+    S.ran = S.ranSql;
+    return repaint();
+  }
+
+  if (t.id === "copysay") {
+    const done = () => { S.copied = true; repaint(); };
+    const text = D.care.iss.say;
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(done, done);
+    } else { done(); }
+  }
+});
+
+/* Incident rows behave like buttons for keyboard users. */
+document.addEventListener("keydown", (ev) => {
+  if (ev.key !== "Enter" && ev.key !== " ") return;
+  const row = ev.target.closest && ev.target.closest("[data-incident]");
+  if (!row) return;
+  ev.preventDefault();
+  S.incident = row.dataset.incident;
+  go("incident");
+});
+
+/* Keep what was typed in the editor across re-renders. */
+document.addEventListener("input", (ev) => {
+  if (ev.target.id === "sqlbox") S.ranSql = ev.target.value;
+});
+
+document.getElementById("role").addEventListener("change", (ev) => {
+  role = ev.target.value;
+  paint();
+});
+
+/* Follow the operating system unless the viewer overrides it. */
+if (window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches) {
+  document.documentElement.setAttribute("data-theme", "dark");
+} else {
+  document.documentElement.setAttribute("data-theme", "light");
+}
+
+paint();
+</script>
+</body>
+</html>
