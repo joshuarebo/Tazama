@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import os
 import platform
+import secrets
 import shutil
 import subprocess
 import sys
@@ -109,13 +110,30 @@ def docker_available() -> bool:
 
 
 def ensure_env_file() -> None:
-    """Materialise a .env from .env.example on first run (demo defaults only)."""
+    """Materialise a .env from .env.example on first run, with generated local secrets.
+
+    `.env.example` deliberately carries placeholder secrets, because it is committed. The
+    settings validator now rejects any value containing "replace" in every environment, so
+    copying the template verbatim would fail startup. That is the correct refusal: the fix
+    is to mint real values here, which also means two clones never share a signing key.
+    """
     env_file = ROOT / ".env"
     if env_file.exists():
         return
     example = ROOT / ".env.example"
-    env_file.write_text(example.read_text(encoding="utf-8"), encoding="utf-8")
-    say("  created .env from .env.example (demo defaults; no secrets)", YELLOW)
+    text = example.read_text(encoding="utf-8")
+    generated = 0
+    lines: list[str] = []
+    for line in text.splitlines():
+        key, sep, value = line.partition("=")
+        if sep and key.strip() in ("PSEUDONYM_SALT", "JWT_SECRET") and "replace" in value.lower():
+            # token_urlsafe(36) is 48 characters, comfortably over MIN_SECRET_LEN.
+            lines.append(f"{key}={secrets.token_urlsafe(36)}")
+            generated += 1
+        else:
+            lines.append(line)
+    env_file.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    say(f"  created .env from .env.example ({generated} local secrets generated)", YELLOW)
 
 
 # --------------------------------------------------------------------- tasks
@@ -502,17 +520,31 @@ def demo() -> None:
         # without a real endpoint and without any data leaving the machine.
         procs.append(
             subprocess.Popen(  # noqa: S603
-                [uv(), "run", "--project", str(BACKEND), "python",
-                 str(ROOT / "scripts" / "fake_llm.py")],
+                [
+                    uv(),
+                    "run",
+                    "--project",
+                    str(BACKEND),
+                    "python",
+                    str(ROOT / "scripts" / "fake_llm.py"),
+                ],
                 cwd=ROOT,
             ),
         )
         procs.append(
             subprocess.Popen(  # noqa: S603
                 [
-                    uv(), "run", "--project", str(BACKEND),
-                    "uvicorn", "tazama.api.app:asgi", "--factory",
-                    "--host", "127.0.0.1", "--port", "8000",
+                    uv(),
+                    "run",
+                    "--project",
+                    str(BACKEND),
+                    "uvicorn",
+                    "tazama.api.app:asgi",
+                    "--factory",
+                    "--host",
+                    "127.0.0.1",
+                    "--port",
+                    "8000",
                 ],
                 cwd=BACKEND,
             ),
@@ -571,7 +603,9 @@ def ci() -> None:
 
 @task("help", "List available targets", "gate")
 def help_task() -> None:
-    say(f"{BOLD}TAZAMA task runner{RESET}  (make <target> | ./make.ps1 <target> | py scripts/mk.py <target>)")
+    say(
+        f"{BOLD}TAZAMA task runner{RESET}  (make <target> | ./make.ps1 <target> | py scripts/mk.py <target>)"
+    )
     groups: dict[str, list[Task]] = {}
     for item in TASKS.values():
         groups.setdefault(item.group, []).append(item)

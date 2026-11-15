@@ -42,6 +42,18 @@ BUCKETS: tuple[float, ...] = (
     30.0,
 )
 
+#: HTTP methods are attacker-controlled: a client may send any token as the method and the
+#: framework passes it through. Capping the *route* label alone therefore does not cap the
+#: series count, because `(method, "__overflow__", status)` stays unbounded through the
+#: method. Anything outside this list collapses to "OTHER".
+ALLOWED_METHODS: frozenset[str] = frozenset(
+    {"GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS", "TRACE", "CONNECT"}
+)
+
+#: Every label on an overflowed series is constant, so overflow can add at most one series
+#: per status code rather than one per distinct input.
+OVERFLOW = "__overflow__"
+
 #: A hard ceiling on distinct label combinations. Past this, new series are folded into
 #: `__overflow__` rather than growing without bound: losing detail is recoverable, and a
 #: metrics backend falling over during an incident is not.
@@ -94,15 +106,21 @@ class Metrics:
         status: int,
         seconds: float,
     ) -> None:
+        safe_method = method.upper() if method.upper() in ALLOWED_METHODS else "OTHER"
         with self._lock:
             self._in_flight -= 1
-            if len(self._requests) < MAX_SERIES:
-                self._requests[(method, route, status)] += 1
+
+            key = (safe_method, route, status)
+            if key in self._requests or len(self._requests) < MAX_SERIES:
+                self._requests[key] += 1
             else:
-                self._requests[(method, "__overflow__", status)] += 1
-            self._latency[
-                (method, route if len(self._latency) < MAX_SERIES else "__overflow__")
-            ].observe(seconds)
+                # Every label constant, so overflow adds one series per status at most.
+                self._requests[(OVERFLOW, OVERFLOW, status)] += 1
+
+            latency_key = (safe_method, route)
+            if latency_key not in self._latency and len(self._latency) >= MAX_SERIES:
+                latency_key = (OVERFLOW, OVERFLOW)
+            self._latency[latency_key].observe(seconds)
 
     # -------------------------------------------------------- app counters
 

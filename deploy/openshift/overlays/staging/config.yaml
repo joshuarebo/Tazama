@@ -1,4 +1,7 @@
 - op: replace
+  path: /data/APP_ENV
+  value: "staging"
+- op: replace
   path: /data/APP_MODE
   value: "demo"
 - op: replace

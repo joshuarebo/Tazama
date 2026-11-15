@@ -161,3 +161,36 @@ def test_the_domain_never_reads_the_clock_directly() -> None:
 def test_the_allowlisted_files_still_exist(relative: str) -> None:
     """An allowlist that names a deleted file quietly stops protecting anything."""
     assert (SRC / relative).is_file(), f"{relative} is allowlisted but missing"
+
+
+# ------------------------------------------------- deployment manifests
+
+
+def test_no_secret_is_an_applied_kustomize_resource() -> None:
+    """A Secret in the applied resources overwrites the real one on every deploy.
+
+    That is how a placeholder becomes the production signing key. Secrets are created out
+    of band or by an operator; `deploy/openshift/secret.example.yaml` documents the keys
+    and is deliberately not referenced by any kustomization.
+    """
+    import re
+
+    deploy = Path(__file__).resolve().parents[3] / "deploy" / "openshift"
+    if not deploy.is_dir():
+        return
+
+    referenced: set[Path] = set()
+    for kustomization in deploy.rglob("kustomization.yaml"):
+        text = kustomization.read_text(encoding="utf-8")
+        for match in re.findall(r"^\s*-\s*([A-Za-z0-9_./-]+\.yaml)\s*$", text, re.M):
+            referenced.add((kustomization.parent / match).resolve())
+
+    offenders = [
+        path.name
+        for path in referenced
+        if path.is_file()
+        and re.search(r"^kind:\s*Secret\s*$", path.read_text(encoding="utf-8"), re.M)
+    ]
+    assert offenders == [], (
+        f"a Secret is applied by kustomize and would overwrite the real cluster values: {offenders}"
+    )

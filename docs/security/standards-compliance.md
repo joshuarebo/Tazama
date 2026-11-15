@@ -89,11 +89,11 @@ the gate that enforces it.
 | 5.7 | Data source reference on all outputs | Every diagnosis lists its evidence rows; every knowledge answer must cite a retrieved document or it is rejected. | PASS |
 | 5.8 | Shadow mode before production | Staging overlay exists and is wired. **Not yet run for the required period.** | PLANNED |
 | 5.9 | Model card for every deployed model | Two written (`call_surge_forecast`, `kpi_anomaly_detector`). **Priority model has none and is not in control; GNN and bandit are registered but disabled.** | PARTIAL |
-| 5.10 | Documented rollback plan | `rollback:production` job plus `oc rollout undo`; migrations gate the rollout. **The written runbook is still to be added.** | PARTIAL |
+| 5.10 | Documented rollback plan | `rollback:production` job, plus `docs/runbooks/rollback.md` covering the decision between rollback and fix-forward, and why migrations are deliberately not auto-reverted. | PASS |
 | 5.11 | Ethical AI and fairness review | Rule-based decisions are inspectable; no protected attributes are used as features. Formal review not yet held. | PARTIAL |
 | 5.12 | Kenya DPA compliance | Pseudonymisation at the boundary, internal-only processing, DPIA written. Blocked on the three procedures in 3.6. | PARTIAL |
 
-**Governance: 7 PASS, 4 PARTIAL, 1 PLANNED.**
+**Governance: 8 PASS, 3 PARTIAL, 1 PLANNED.**
 
 ---
 
@@ -129,11 +129,11 @@ the gate that enforces it.
 | CI/CD | 7 | 0 | 0 | 7 |
 | API | 5 | 1 | 0 | 6 |
 | Monitoring | 3 | 2 | 1 | 6 |
-| Governance | 7 | 5 | 0 | 12 |
+| Governance | 8 | 4 | 0 | 12 |
 | AIOps | 2 | 1 | 1 | 4 |
-| **Total** | **35** | **10** | **2** | **47** |
+| **Total** | **36** | **9** | **2** | **47** |
 
-**74% PASS, 21% PARTIAL, 4% TODO.**
+**77% PASS, 19% PARTIAL, 4% TODO.**
 
 For reference, Intelligent Commissions scored 64% PASS at the equivalent stage. The
 difference is mostly CI/CD and API, which were built in from the start here.
@@ -174,3 +174,36 @@ Plus the CI/CD and API rows in full, which is what makes the remaining work sche
 rather than open-ended.
 
 **Verdict: deployable to a lab or staging namespace now. Production needs items 1 and 2.**
+
+---
+
+## Findings fixed during this assessment
+
+Worth recording, because the chain was only visible when the three were read together.
+
+**A placeholder signing key would have reached production.** The base manifest shipped a
+`Secret` containing `JWT_SECRET: "REPLACE_IN_CLUSTER"`, and that file was listed in the
+kustomize resources, so `oc apply -k` would have overwritten the real cluster Secret on
+every deploy. Separately, the ConfigMap did not set `APP_ENV`, so it fell back to its
+default of `local`, where the validator that rejects placeholder secrets returns early.
+And `"REPLACE_IN_CLUSTER"` matched none of the placeholder patterns that were checked.
+
+Together: a known signing key in production, which is admin-token forgery by anyone with
+repository access, plus a known pseudonymisation salt, which makes every pseudonym
+reversible.
+
+Each link is now broken on its own:
+
+- the Secret is no longer an applied resource, and
+  `tests/unit/test_import_boundaries.py` fails if any Secret is added to a kustomization;
+- `APP_ENV` is set explicitly in every overlay;
+- placeholder rejection is **unconditional**, in every environment, and matches `replace`
+  case-insensitively. `tests/security/test_placeholder_secrets.py` covers each token;
+- `scripts/mk.py` generates real local secrets when creating `.env`, since the committed
+  template is a placeholder by design.
+
+**Metrics cardinality could be driven past its cap.** The route label was bounded but the
+HTTP method was not, and a client may send any token as a method, so the overflow key was
+still unbounded. Methods are now normalised to a fixed allowlist and the overflow series
+has entirely constant labels.
+

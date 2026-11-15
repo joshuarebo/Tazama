@@ -121,6 +121,10 @@ metadata:
   name: tazama-config
 data:
   # Non-secret configuration only. Everything here is safe to read in the cluster.
+  # APP_ENV gates the checks that refuse dev auth and placeholder secrets. It
+  # defaults to "local", where those checks are skipped, so leaving it unset here
+  # would have made the cluster fail *open*. Overlays override it per environment.
+  APP_ENV: "prod"
   APP_MODE: "live"
   ALLOW_LIVE_WRITES: "false"          # must be flipped deliberately, per the config rules
   DISPLAY_TZ: "Africa/Nairobi"
@@ -139,26 +143,3 @@ metadata:
 data:
   NEXT_PUBLIC_APP_MODE: "live"
   NODE_ENV: "production"
----
-# Secrets are NOT in git. This documents the keys the deployment expects; the values are
-# created once per environment by the platform team, or injected from the cluster's
-# secret store. `make openshift-secret` prints the command without the values.
-apiVersion: v1
-kind: Secret
-metadata:
-  name: tazama-secrets
-  annotations:
-    tazama.io/managed-by: "platform team, out of band"
-type: Opaque
-stringData:
-  DB_DSN: "REPLACE_IN_CLUSTER"
-  DB_USER: "REPLACE_IN_CLUSTER"
-  DB_PASSWORD: "REPLACE_IN_CLUSTER"
-  JWT_SECRET: "REPLACE_IN_CLUSTER"
-  PSEUDONYM_SALT: "REPLACE_IN_CLUSTER"
-  OIDC_ISSUER: "REPLACE_IN_CLUSTER"
-  OIDC_CLIENT_ID: "REPLACE_IN_CLUSTER"
-  OIDC_CLIENT_SECRET: "REPLACE_IN_CLUSTER"
-  LLM_BASE_URL: "REPLACE_IN_CLUSTER"
-  LLM_API_KEY: "REPLACE_IN_CLUSTER"
-  TEAMS_WEBHOOK_URL: "REPLACE_IN_CLUSTER"

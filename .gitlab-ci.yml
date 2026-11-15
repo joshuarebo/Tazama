@@ -268,13 +268,19 @@ rollback:production:
   image:
     name: quay.io/openshift/origin-cli:4.16
     entrypoint: [""]
+  variables:
+    OC_TOKEN: $OPENSHIFT_TOKEN_PROD
+    OC_PROJECT: $OPENSHIFT_PROJECT_PROD
   script:
-    - oc login "$OPENSHIFT_SERVER" --token="$OPENSHIFT_TOKEN_PROD" --insecure-skip-tls-verify=false
-    - oc project "$OPENSHIFT_PROJECT_PROD"
-    - oc rollout undo deployment/tazama-api    -n "$OPENSHIFT_PROJECT_PROD"
-    - oc rollout undo deployment/tazama-worker -n "$OPENSHIFT_PROJECT_PROD"
-    - oc rollout undo deployment/tazama-web    -n "$OPENSHIFT_PROJECT_PROD"
-    - oc rollout status deployment/tazama-api -n "$OPENSHIFT_PROJECT_PROD" --timeout=600s
+    - oc login "$OPENSHIFT_SERVER" --token="$OC_TOKEN" --insecure-skip-tls-verify=false
+    - oc project "$OC_PROJECT"
+    # Reverts the Deployments. A migration that already applied is NOT undone here: see
+    # docs/runbooks/rollback.md, because an automatic down-migration during an incident
+    # is how a rollback turns into data loss.
+    - oc rollout undo deployment/tazama-api    -n "$OC_PROJECT"
+    - oc rollout undo deployment/tazama-worker -n "$OC_PROJECT"
+    - oc rollout undo deployment/tazama-web    -n "$OC_PROJECT"
+    - oc rollout status deployment/tazama-api -n "$OC_PROJECT" --timeout=600s
   environment:
     name: production
     action: stop

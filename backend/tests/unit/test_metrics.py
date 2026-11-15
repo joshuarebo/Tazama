@@ -98,3 +98,46 @@ def test_the_type_header_is_emitted_once_per_metric() -> None:
     m.incr("tazama_thing_total", a="1")
     m.incr("tazama_thing_total", a="2")
     assert _render(m).count("# TYPE tazama_thing_total counter") == 1
+
+
+def test_an_arbitrary_http_method_cannot_mint_series() -> None:
+    """The cap on `route` alone does not cap the series count.
+
+    A client may send any token as the HTTP method, so without normalisation the overflow
+    key `(method, "__overflow__", status)` is still unbounded through the method. This is
+    the bypass, and it is the one that actually exhausts memory.
+    """
+    m = Metrics()
+    for i in range(MAX_SERIES + 1_000):
+        m.request_started()
+        m.request_finished(method=f"EVIL{i}", route="/x", status=200, seconds=0.001)
+
+    text = _render(m)
+    series = [ln for ln in text.splitlines() if ln.startswith("tazama_http_requests_total{")]
+    # One for OTHER/x/200, one for the fully-constant overflow bucket. Nothing more.
+    assert len(series) <= 2, series[:5]
+    assert 'method="OTHER"' in text
+    assert "EVIL" not in text
+
+
+def test_known_methods_keep_their_name() -> None:
+    m = Metrics()
+    for method in ("get", "POST", "delete"):
+        m.request_started()
+        m.request_finished(method=method, route="/x", status=200, seconds=0.001)
+    text = _render(m)
+    for expected in ('method="GET"', 'method="POST"', 'method="DELETE"'):
+        assert expected in text
+
+
+def test_latency_series_are_capped_too() -> None:
+    m = Metrics()
+    for i in range(MAX_SERIES + 500):
+        m.request_started()
+        m.request_finished(method="GET", route=f"/r/{i}", status=200, seconds=0.01)
+    lines = [
+        ln
+        for ln in _render(m).splitlines()
+        if ln.startswith("tazama_http_request_duration_seconds_count{")
+    ]
+    assert len(lines) <= MAX_SERIES + 1

@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import os
 from functools import lru_cache
-from typing import Annotated, Literal
+from typing import Annotated, Final, Literal
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from pydantic import (
@@ -37,6 +37,17 @@ SmsMode = Literal["mock"]
 
 #: Secrets must be at least this long to be worth the name.
 MIN_SECRET_LEN = 16
+
+#: Substrings that mark a value as a placeholder rather than a secret. Checked
+#: case-insensitively in every environment, including local.
+PLACEHOLDER_TOKENS: Final[tuple[str, ...]] = (
+    "dev-only",
+    "replace",  # catches replace-with, REPLACE_IN_CLUSTER, replace_me
+    "change-me",
+    "changeme",
+    "your-secret",
+    "placeholder",
+)
 
 Role = Literal["care_agent", "noc_engineer", "analyst", "manager", "admin"]
 ALL_ROLES: tuple[str, ...] = ("care_agent", "noc_engineer", "analyst", "manager", "admin")
@@ -235,6 +246,32 @@ class Settings(BaseSettings):
         return self
 
     @model_validator(mode="after")
+    def _placeholder_secrets_are_never_accepted(self) -> Settings:
+        """Reject a placeholder signing key or salt in **every** environment.
+
+        Deliberately not gated on `APP_ENV`. The checks below it are, and that is the
+        right default for local work with short dev values, but it means a deployment
+        that forgets to set `APP_ENV` falls back to "local" and skips validation
+        entirely. Combined with a manifest that ships a placeholder, that produces a
+        *known* `JWT_SECRET` in production: anyone who can read the repository can mint
+        an admin token, and every pseudonym becomes reversible against a known salt.
+
+        That exact chain nearly shipped, so this check fails closed and is unconditional.
+        A value containing "replace" is never a real secret anywhere.
+        """
+        problems: list[str] = []
+        for name, secret in (
+            ("PSEUDONYM_SALT", self.PSEUDONYM_SALT),
+            ("JWT_SECRET", self.JWT_SECRET),
+        ):
+            lowered = secret.get_secret_value().lower()
+            if any(token in lowered for token in PLACEHOLDER_TOKENS):
+                problems.append(f"{name} still holds a placeholder value")
+        if problems:
+            raise ValueError("; ".join(problems))
+        return self
+
+    @model_validator(mode="after")
     def _secrets_are_real_outside_local(self) -> Settings:
         if self.APP_ENV in ("local", "dev"):
             return self
@@ -243,11 +280,8 @@ class Settings(BaseSettings):
             ("PSEUDONYM_SALT", self.PSEUDONYM_SALT),
             ("JWT_SECRET", self.JWT_SECRET),
         ):
-            raw = secret.get_secret_value()
-            if len(raw) < MIN_SECRET_LEN:
+            if len(secret.get_secret_value()) < MIN_SECRET_LEN:
                 problems.append(f"{name} must be at least {MIN_SECRET_LEN} characters")
-            if "dev-only" in raw or "replace-with" in raw or "change-me" in raw:
-                problems.append(f"{name} still holds a placeholder value")
         if self.AUTH_MODE == "dev":
             problems.append(f"AUTH_MODE=dev is not allowed when APP_ENV={self.APP_ENV}")
         if problems:
