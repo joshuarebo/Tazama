@@ -1,0 +1,40 @@
+# Applied with `oc process`, so the image tag is the deployed one rather than a floating
+# tag. Migrations run to completion before any rollout begins; the pipeline waits on it.
+apiVersion: template.openshift.io/v1
+kind: Template
+metadata:
+  name: tazama-migrate
+parameters:
+  - { name: IMAGE, required: true }
+objects:
+  - apiVersion: batch/v1
+    kind: Job
+    metadata:
+      name: tazama-migrate
+    spec:
+      backoffLimit: 0          # a failed migration must stop the deploy, not retry blindly
+      ttlSecondsAfterFinished: 3600
+      template:
+        spec:
+          restartPolicy: Never
+          securityContext:
+            runAsNonRoot: true
+            seccompProfile: { type: RuntimeDefault }
+          containers:
+            - name: migrate
+              image: ${IMAGE}
+              command: ["alembic", "upgrade", "head"]
+              securityContext:
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                capabilities: { drop: ["ALL"] }
+              envFrom:
+                - configMapRef: { name: tazama-config }
+                - secretRef: { name: tazama-secrets }
+              resources:
+                requests: { cpu: 100m, memory: 256Mi }
+                limits:   { cpu: "1",  memory: 512Mi }
+              volumeMounts: [{ name: tmp, mountPath: /tmp }]
+          volumes:
+            - name: tmp
+              emptyDir: { medium: Memory, sizeLimit: 32Mi }

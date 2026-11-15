@@ -1,0 +1,300 @@
+# TAZAMA GitLab pipeline.
+#
+# Maps onto the Safaricom AI standards checklist (docs/security/standards-compliance.md):
+#   2.1 linting          -> lint:backend, lint:frontend
+#   2.2 security scanning -> scan:bandit, scan:trivy-fs, scan:trivy-image, scan:secrets
+#   2.3 coverage >= 80%  -> test:backend (coverage_gate.py)
+#   2.4 GitOps           -> deploy jobs apply manifests from deploy/openshift
+#   2.5 no secrets       -> scan:secrets, and every credential comes from a CI variable
+#   2.6 idempotent       -> every job is safe to re-run; deploys are declarative applies
+#   2.7 data validation  -> test:backend runs the schema and integrity suites
+#
+# Credentials come from masked, protected CI/CD variables and never from this file:
+#   CI_REGISTRY, CI_REGISTRY_USER, CI_REGISTRY_PASSWORD  (GitLab provides these)
+#   OPENSHIFT_SERVER, OPENSHIFT_TOKEN_STAGING, OPENSHIFT_TOKEN_PROD
+#   OPENSHIFT_PROJECT_STAGING, OPENSHIFT_PROJECT_PROD
+
+stages: [lint, test, scan, build, deploy, verify]
+
+variables:
+  PYTHON_IMAGE: python:3.12-slim-bookworm
+  NODE_IMAGE: node:22-bookworm-slim
+  BACKEND_IMAGE: $CI_REGISTRY_IMAGE/backend
+  WEB_IMAGE: $CI_REGISTRY_IMAGE/web
+  # Immutable tag. `latest` in a deployment makes a rollback ambiguous.
+  IMAGE_TAG: $CI_COMMIT_SHORT_SHA
+  PIP_CACHE_DIR: $CI_PROJECT_DIR/.cache/pip
+  UV_CACHE_DIR: $CI_PROJECT_DIR/.cache/uv
+  FF_USE_FASTZIP: "true"
+
+default:
+  interruptible: true
+  retry:
+    max: 2
+    # Retry infrastructure failures only. Retrying a real test failure hides a flake,
+    # which is worse than seeing it.
+    when: [runner_system_failure, stuck_or_timeout_failure, api_failure]
+
+.python:
+  image: $PYTHON_IMAGE
+  before_script:
+    - pip install --quiet --root-user-action=ignore uv
+    - uv sync --project backend --extra dev --extra ml
+  cache:
+    key:
+      files: [backend/uv.lock]
+    paths: [.cache/uv]
+
+.node:
+  image: $NODE_IMAGE
+  before_script:
+    - cd web && npm ci --no-audit --no-fund
+  cache:
+    key:
+      files: [web/package-lock.json]
+    paths: [web/node_modules]
+
+# ----------------------------------------------------------------- lint
+
+lint:backend:
+  extends: .python
+  stage: lint
+  script:
+    - uv run --project backend ruff check backend/src backend/tests scripts
+    - uv run --project backend ruff format --check backend/src backend/tests scripts
+    - uv run --project backend mypy backend/src
+    # Module boundaries are a design contract, so a breach fails the build rather than
+    # being noticed in review.
+    - uv run --project backend lint-imports --config backend/pyproject.toml
+
+lint:frontend:
+  extends: .node
+  stage: lint
+  script:
+    - npm run lint
+    - npm run typecheck
+
+# ----------------------------------------------------------------- test
+
+test:backend:
+  extends: .python
+  stage: test
+  script:
+    - uv run --project backend pytest -q --cov=tazama --cov-report=xml --cov-report=term
+    # Fails below 80% on domain/ and modules/, per standard 2.3.
+    - uv run --project backend python scripts/coverage_gate.py
+    - uv run --project backend pytest -m eval -q
+  coverage: '/TOTAL.*?(\d+\.\d+)%/'
+  artifacts:
+    when: always
+    reports:
+      junit: backend/junit.xml
+      coverage_report:
+        coverage_format: cobertura
+        path: backend/coverage.xml
+    expire_in: 1 week
+
+test:frontend:
+  extends: .node
+  stage: test
+  script:
+    - npm run test -- --run
+
+test:e2e:
+  extends: .node
+  stage: test
+  script:
+    - npx playwright install --with-deps chromium
+    - npm run build
+    - node tests/verify-demo-file.mjs
+  artifacts:
+    when: on_failure
+    paths: [web/test-results]
+    expire_in: 1 week
+  allow_failure: false
+
+# ----------------------------------------------------------------- scan
+
+scan:secrets:
+  image: $PYTHON_IMAGE
+  stage: scan
+  before_script:
+    - pip install --quiet --root-user-action=ignore detect-secrets
+  script:
+    - python scripts/scan_secrets.py
+
+scan:bandit:
+  extends: .python
+  stage: scan
+  script:
+    # ruff already runs the bandit ruleset in-tree; this is the standalone pass the
+    # standard names explicitly (2.2), reported so a reviewer can read it.
+    - uv run --project backend pip install bandit[sarif]
+    - uv run --project backend bandit -r backend/src -ll -f json -o bandit.json || true
+    - uv run --project backend bandit -r backend/src -ll
+  artifacts:
+    when: always
+    paths: [bandit.json]
+    expire_in: 1 week
+
+scan:dependencies:
+  extends: .python
+  stage: scan
+  script:
+    - uv run --project backend pip-audit --strict --progress-spinner off
+    - cd web && npm audit --audit-level=high
+
+scan:sbom:
+  extends: .python
+  stage: scan
+  script:
+    - uv run --project backend python scripts/sbom.py
+  artifacts:
+    paths: [artifacts/sbom.json]
+    expire_in: 1 month
+
+scan:trivy-fs:
+  image:
+    name: aquasec/trivy:0.58.1
+    entrypoint: [""]
+  stage: scan
+  script:
+    - trivy fs --exit-code 0 --severity HIGH,CRITICAL --format table .
+    - trivy config --exit-code 1 --severity HIGH,CRITICAL .
+
+# ----------------------------------------------------------------- build
+
+.build:
+  stage: build
+  image:
+    name: gcr.io/kaniko-project/executor:v1.23.2-debug
+    entrypoint: [""]
+  # Kaniko rather than docker-in-docker: no privileged runner, which is what a hardened
+  # cluster will allow.
+  script:
+    - /kaniko/executor
+      --context "$CI_PROJECT_DIR/$BUILD_CONTEXT"
+      --dockerfile "$CI_PROJECT_DIR/$BUILD_CONTEXT/Dockerfile"
+      --destination "$TARGET_IMAGE:$IMAGE_TAG"
+      --destination "$TARGET_IMAGE:$CI_COMMIT_REF_SLUG"
+      --build-arg NEXT_PUBLIC_API_BASE_URL="$NEXT_PUBLIC_API_BASE_URL"
+      --build-arg NEXT_PUBLIC_APP_MODE="$NEXT_PUBLIC_APP_MODE"
+      --cache=true
+      --reproducible
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+    - if: $CI_COMMIT_TAG
+
+build:backend:
+  extends: .build
+  variables:
+    BUILD_CONTEXT: backend
+    TARGET_IMAGE: $BACKEND_IMAGE
+
+build:web:
+  extends: .build
+  variables:
+    BUILD_CONTEXT: web
+    TARGET_IMAGE: $WEB_IMAGE
+
+scan:trivy-image:
+  stage: build
+  needs: [build:backend, build:web]
+  image:
+    name: aquasec/trivy:0.58.1
+    entrypoint: [""]
+  script:
+    # Standard 1.10: image scanning. HIGH and CRITICAL fail the build.
+    - trivy image --exit-code 1 --severity HIGH,CRITICAL --ignore-unfixed "$BACKEND_IMAGE:$IMAGE_TAG"
+    - trivy image --exit-code 1 --severity HIGH,CRITICAL --ignore-unfixed "$WEB_IMAGE:$IMAGE_TAG"
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+    - if: $CI_COMMIT_TAG
+
+# ----------------------------------------------------------------- deploy
+
+.deploy:
+  stage: deploy
+  image:
+    name: quay.io/openshift/origin-cli:4.16
+    entrypoint: [""]
+  script:
+    - oc login "$OPENSHIFT_SERVER" --token="$OC_TOKEN" --insecure-skip-tls-verify=false
+    - oc project "$OC_PROJECT"
+    # Declarative apply, so re-running the job converges rather than duplicating.
+    - oc apply -k deploy/openshift/overlays/$OVERLAY
+    - oc set image deployment/tazama-api  api=$BACKEND_IMAGE:$IMAGE_TAG -n "$OC_PROJECT"
+    - oc set image deployment/tazama-worker worker=$BACKEND_IMAGE:$IMAGE_TAG -n "$OC_PROJECT"
+    - oc set image deployment/tazama-web   web=$WEB_IMAGE:$IMAGE_TAG -n "$OC_PROJECT"
+    # Migrations run as a Job before traffic shifts, and the rollout waits on it.
+    - oc delete job tazama-migrate -n "$OC_PROJECT" --ignore-not-found
+    - oc process -f deploy/openshift/base/migrate-job.yaml
+      -p IMAGE=$BACKEND_IMAGE:$IMAGE_TAG | oc apply -f -
+    - oc wait --for=condition=complete job/tazama-migrate -n "$OC_PROJECT" --timeout=600s
+    - oc rollout status deployment/tazama-api    -n "$OC_PROJECT" --timeout=600s
+    - oc rollout status deployment/tazama-worker -n "$OC_PROJECT" --timeout=600s
+    - oc rollout status deployment/tazama-web    -n "$OC_PROJECT" --timeout=600s
+
+deploy:staging:
+  extends: .deploy
+  variables:
+    OVERLAY: staging
+    OC_TOKEN: $OPENSHIFT_TOKEN_STAGING
+    OC_PROJECT: $OPENSHIFT_PROJECT_STAGING
+  environment:
+    name: staging
+    url: https://tazama-staging.apps.internal
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+
+deploy:production:
+  extends: .deploy
+  variables:
+    OVERLAY: production
+    OC_TOKEN: $OPENSHIFT_TOKEN_PROD
+    OC_PROJECT: $OPENSHIFT_PROJECT_PROD
+  environment:
+    name: production
+    url: https://tazama.apps.internal
+    on_stop: rollback:production
+  rules:
+    # Production is tag-only and manual. Standard 5.2: a human approves a release.
+    - if: $CI_COMMIT_TAG
+      when: manual
+      allow_failure: false
+
+rollback:production:
+  stage: deploy
+  image:
+    name: quay.io/openshift/origin-cli:4.16
+    entrypoint: [""]
+  script:
+    - oc login "$OPENSHIFT_SERVER" --token="$OPENSHIFT_TOKEN_PROD" --insecure-skip-tls-verify=false
+    - oc project "$OPENSHIFT_PROJECT_PROD"
+    - oc rollout undo deployment/tazama-api    -n "$OPENSHIFT_PROJECT_PROD"
+    - oc rollout undo deployment/tazama-worker -n "$OPENSHIFT_PROJECT_PROD"
+    - oc rollout undo deployment/tazama-web    -n "$OPENSHIFT_PROJECT_PROD"
+    - oc rollout status deployment/tazama-api -n "$OPENSHIFT_PROJECT_PROD" --timeout=600s
+  environment:
+    name: production
+    action: stop
+  rules:
+    - if: $CI_COMMIT_TAG
+      when: manual
+  # A rollback that cannot be re-run is not a rollback.
+  allow_failure: false
+
+# ----------------------------------------------------------------- verify
+
+verify:staging:
+  stage: verify
+  image: $PYTHON_IMAGE
+  needs: [deploy:staging]
+  before_script:
+    - pip install --quiet --root-user-action=ignore httpx
+  script:
+    # A deployment that reports success while the app is unhealthy is the failure mode
+    # this job exists to catch.
+    - python scripts/smoke_check.py "https://tazama-staging.apps.internal"
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH

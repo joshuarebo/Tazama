@@ -1,0 +1,5 @@
+# Production keeps the base values. Teams delivery and live writes stay off until each is
+# turned on deliberately, with a change record, rather than arriving with a deploy.
+- op: replace
+  path: /data/LOG_LEVEL
+  value: "INFO"

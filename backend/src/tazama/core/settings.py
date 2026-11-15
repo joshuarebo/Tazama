@@ -127,6 +127,9 @@ class Settings(BaseSettings):
     # -------------------------------------------------------- observability
     OTEL_EXPORTER_OTLP_ENDPOINT: str = ""
     OTEL_SERVICE_NAME: str = "tazama-api"
+    #: Serves /metrics for Prometheus. Off in tests so a scrape cannot change
+    #: counters another test asserts on; on everywhere a dashboard exists.
+    METRICS_ENABLED: bool = True
 
     # ------------------------------------------------------- ai kill switches
     AI_CLASSIFICATION_ENABLED: bool = True

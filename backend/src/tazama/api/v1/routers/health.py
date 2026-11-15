@@ -61,6 +61,31 @@ async def readyz(settings: SettingsDep, response: Response) -> Readiness:
     return Readiness(status=status, checks=checks)
 
 
+@router.get(
+    "/metrics",
+    summary="Prometheus metrics",
+    include_in_schema=False,
+    response_class=Response,
+)
+async def metrics(settings: SettingsDep) -> Response:
+    """The scrape target for Prometheus, and therefore for the Grafana dashboards.
+
+    Unauthenticated on purpose, and safe to be: the payload is counters and latency
+    histograms labelled by route *template*, with no identifier, no query text and no
+    business value in it. The NetworkPolicy in deploy/openshift restricts who can reach
+    the port at all, which is the right place for that control. It is excluded from the
+    OpenAPI document because it is an operational endpoint, not part of the API contract.
+    """
+    if not settings.METRICS_ENABLED:
+        return Response(status_code=404)
+    from tazama.api.metrics import METRICS
+
+    return Response(
+        content=METRICS.render(),
+        media_type="text/plain; version=0.0.4; charset=utf-8",
+    )
+
+
 def as_dict(readiness: Readiness) -> dict[str, Any]:
     """Used by scripts/doctor.py so the CLI and the endpoint cannot drift apart."""
     return readiness.model_dump()

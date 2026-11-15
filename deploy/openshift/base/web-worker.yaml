@@ -1,0 +1,137 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: tazama-web
+  labels: { app.kubernetes.io/name: tazama, app.kubernetes.io/component: web }
+spec:
+  replicas: 2
+  revisionHistoryLimit: 5
+  selector:
+    matchLabels: { app.kubernetes.io/name: tazama, app.kubernetes.io/component: web }
+  strategy:
+    type: RollingUpdate
+    rollingUpdate: { maxSurge: 1, maxUnavailable: 0 }
+  template:
+    metadata:
+      labels: { app.kubernetes.io/name: tazama, app.kubernetes.io/component: web }
+    spec:
+      terminationGracePeriodSeconds: 30
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile: { type: RuntimeDefault }
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels: { app.kubernetes.io/name: tazama, app.kubernetes.io/component: web }
+      containers:
+        - name: web
+          image: tazama/web:replaced-by-ci
+          ports: [{ name: http, containerPort: 3000 }]
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: ["ALL"] }
+          envFrom:
+            - configMapRef: { name: tazama-web-config }
+          startupProbe:
+            httpGet: { path: /, port: http }
+            periodSeconds: 3
+            failureThreshold: 20
+          livenessProbe:
+            httpGet: { path: /, port: http }
+            periodSeconds: 20
+            timeoutSeconds: 3
+            failureThreshold: 3
+          readinessProbe:
+            httpGet: { path: /, port: http }
+            periodSeconds: 10
+            timeoutSeconds: 3
+          lifecycle:
+            preStop:
+              exec: { command: ["sleep", "5"] }
+          resources:
+            requests: { cpu: 100m, memory: 256Mi }
+            limits:   { cpu: "1",  memory: 512Mi }
+          volumeMounts:
+            - { name: tmp, mountPath: /tmp }
+            - { name: next-cache, mountPath: /app/.next/cache }
+      volumes:
+        - name: tmp
+          emptyDir: { medium: Memory, sizeLimit: 32Mi }
+        - name: next-cache
+          emptyDir: { sizeLimit: 256Mi }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: tazama-web
+  labels: { app.kubernetes.io/name: tazama, app.kubernetes.io/component: web }
+spec:
+  selector: { app.kubernetes.io/name: tazama, app.kubernetes.io/component: web }
+  ports: [{ name: http, port: 3000, targetPort: http }]
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: tazama-web
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels: { app.kubernetes.io/name: tazama, app.kubernetes.io/component: web }
+---
+# The worker drains the transactional outbox and runs the scheduler.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: tazama-worker
+  labels: { app.kubernetes.io/name: tazama, app.kubernetes.io/component: worker }
+spec:
+  # Deliberately one replica. The outbox consumer is idempotent and safe to replay, but a
+  # second scheduler would emit duplicate digests, and "at most one scheduler" is simpler
+  # to reason about than a distributed lock. Scaling this needs leader election first.
+  replicas: 1
+  revisionHistoryLimit: 5
+  selector:
+    matchLabels: { app.kubernetes.io/name: tazama, app.kubernetes.io/component: worker }
+  strategy:
+    # Recreate, not RollingUpdate: two schedulers overlapping for even a few seconds is
+    # exactly the duplicate-send problem the single replica exists to avoid.
+    type: Recreate
+  template:
+    metadata:
+      labels: { app.kubernetes.io/name: tazama, app.kubernetes.io/component: worker }
+    spec:
+      terminationGracePeriodSeconds: 60
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile: { type: RuntimeDefault }
+      containers:
+        - name: worker
+          image: tazama/backend:replaced-by-ci
+          command: ["python", "-m", "tazama.worker"]
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: ["ALL"] }
+          envFrom:
+            - configMapRef: { name: tazama-config }
+            - secretRef: { name: tazama-secrets }
+          # No HTTP port, so liveness is a file the loop touches each pass. A worker that
+          # is running but has stopped making progress is the failure worth catching, and
+          # a process check would miss it.
+          livenessProbe:
+            exec:
+              command: ["python", "-c", "import pathlib,time,sys; p=pathlib.Path('/tmp/worker-heartbeat'); sys.exit(0 if p.exists() and time.time()-p.stat().st_mtime < 120 else 1)"]
+            initialDelaySeconds: 30
+            periodSeconds: 30
+            failureThreshold: 3
+          resources:
+            requests: { cpu: 100m, memory: 384Mi }
+            limits:   { cpu: "1",  memory: 1Gi }
+          volumeMounts:
+            - { name: tmp, mountPath: /tmp }
+      volumes:
+        - name: tmp
+          emptyDir: { medium: Memory, sizeLimit: 64Mi }

@@ -7,6 +7,11 @@ const nextConfig = {
 
   reactStrictMode: true,
   poweredByHeader: false,
+
+  // Traces the modules actually imported and emits a self-contained server bundle, so the
+  // runtime image carries no node_modules tree and no build toolchain. Required by
+  // web/Dockerfile, which copies .next/standalone.
+  output: "standalone",
   async headers() {
     // Security headers for the console itself. The API sets its own.
     return [

@@ -13,6 +13,7 @@ from fastapi import Request, Response
 from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 
+from tazama.api.metrics import METRICS
 from tazama.core.errors import PROBLEM_CONTENT_TYPE, PayloadTooLarge, TazamaError
 from tazama.core.ids import get_correlation_id, new_correlation_id, set_correlation_id
 from tazama.core.logging import get_logger
@@ -21,6 +22,21 @@ from tazama.core.security import RateLimiter
 _log = get_logger(__name__)
 
 Next = Callable[[Request], Awaitable[Response]]
+
+
+def _route_of(request: Request) -> str:
+    """The route *template*, never the resolved path.
+
+    `/api/v1/incidents/{incident_id}` is one metric series. The resolved path would be one
+    series per incident, which is the standard way a metrics backend gets taken down by
+    its own instrumentation. Requests that matched no route collapse to one label rather
+    than letting a scanner hitting random URLs mint unbounded series.
+    """
+    route = request.scope.get("route")
+    path = getattr(route, "path", None)
+    if isinstance(path, str) and path:
+        return path
+    return "__unmatched__"
 
 
 def problem_response(request: Request, error: TazamaError) -> JSONResponse:
@@ -70,8 +86,27 @@ class CorrelationIdMiddleware(BaseHTTPMiddleware):
         cid = candidate or new_correlation_id()
         set_correlation_id(cid)
         started = time.perf_counter()
-        response = await call_next(request)
-        duration_ms = round((time.perf_counter() - started) * 1000, 2)
+        METRICS.request_started()
+        try:
+            response = await call_next(request)
+        except Exception:
+            # An unhandled error still finished a request. Without this the in-flight
+            # gauge leaks upward on every 500 and eventually reads as a hung service.
+            METRICS.request_finished(
+                method=request.method,
+                route=_route_of(request),
+                status=500,
+                seconds=time.perf_counter() - started,
+            )
+            raise
+        elapsed = time.perf_counter() - started
+        duration_ms = round(elapsed * 1000, 2)
+        METRICS.request_finished(
+            method=request.method,
+            route=_route_of(request),
+            status=response.status_code,
+            seconds=elapsed,
+        )
         response.headers[self.header] = cid
         _log.info(
             "http_request",

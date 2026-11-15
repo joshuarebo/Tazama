@@ -31,15 +31,21 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends curl libaio1 \
     && rm -rf /var/lib/apt/lists/* \
     && groupadd --gid 10001 tazama \
-    && useradd --uid 10001 --gid tazama --create-home --shell /usr/sbin/nologin tazama
+    && useradd --uid 10001 --gid 0 --create-home --shell /usr/sbin/nologin tazama
 
-COPY --from=builder /opt/venv /opt/venv
+# OpenShift runs the container as an arbitrary high UID that is NOT in /etc/passwd, and it
+# always puts that UID in group 0. So everything the process touches must be owned by group
+# 0 and group-writable, and USER must be numeric. A fixed non-root user is not sufficient:
+# the image starts fine under plain Docker and fails under OpenShift's restricted SCC, a
+# difference that only appears once it reaches the cluster.
+COPY --from=builder --chown=10001:0 /opt/venv /opt/venv
 WORKDIR /app
-COPY --chown=tazama:tazama src /app/src
-COPY --chown=tazama:tazama alembic.ini /app/alembic.ini
-COPY --chown=tazama:tazama alembic /app/alembic
+COPY --chown=10001:0 src /app/src
+COPY --chown=10001:0 alembic.ini /app/alembic.ini
+COPY --chown=10001:0 alembic /app/alembic
+RUN chmod -R g=u /app /opt/venv /home/tazama
 
-USER tazama
+USER 10001
 EXPOSE 8000
 
 HEALTHCHECK --interval=15s --timeout=5s --start-period=20s --retries=5 \

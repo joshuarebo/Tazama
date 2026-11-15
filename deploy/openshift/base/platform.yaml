@@ -1,0 +1,164 @@
+# Route, network policy, quotas, config. Everything that is not a workload.
+---
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: tazama
+  annotations:
+    # The router terminates TLS and re-encrypts to the pod is not used here: the service
+    # is plain HTTP inside the mesh and TLS ends at the edge. HSTS is set by the router
+    # so a downgrade cannot happen even on a redirect.
+    haproxy.router.openshift.io/hsts_header: "max-age=31536000;includeSubDomains;preload"
+    haproxy.router.openshift.io/timeout: "60s"
+    haproxy.router.openshift.io/rate-limit-connections: "true"
+    haproxy.router.openshift.io/rate-limit-connections.rate-http: "200"
+spec:
+  to: { kind: Service, name: tazama-web, weight: 100 }
+  port: { targetPort: http }
+  tls:
+    termination: edge
+    insecureEdgeTerminationPolicy: Redirect
+---
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: tazama-api
+  annotations:
+    haproxy.router.openshift.io/hsts_header: "max-age=31536000;includeSubDomains;preload"
+    haproxy.router.openshift.io/timeout: "60s"
+spec:
+  path: /api
+  to: { kind: Service, name: tazama-api, weight: 100 }
+  port: { targetPort: http }
+  tls:
+    termination: edge
+    insecureEdgeTerminationPolicy: Redirect
+---
+# Default deny. Without this every pod in the cluster can reach the database credentials
+# held by this one, which is the lateral movement an attacker is actually looking for.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-ingress
+spec:
+  podSelector: {}
+  policyTypes: [Ingress]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-router-to-web-and-api
+spec:
+  podSelector:
+    matchExpressions:
+      - { key: app.kubernetes.io/component, operator: In, values: [web, api] }
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels: { policy-group.network.openshift.io/ingress: "" }
+      ports:
+        - { protocol: TCP, port: 3000 }
+        - { protocol: TCP, port: 8000 }
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-web-to-api
+spec:
+  podSelector:
+    matchLabels: { app.kubernetes.io/component: api }
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels: { app.kubernetes.io/component: web }
+      ports: [{ protocol: TCP, port: 8000 }]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-prometheus-scrape
+spec:
+  podSelector:
+    matchLabels: { app.kubernetes.io/component: api }
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels: { network.openshift.io/policy-group: monitoring }
+      ports: [{ protocol: TCP, port: 8000 }]
+---
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: tazama
+spec:
+  hard:
+    requests.cpu: "4"
+    requests.memory: 8Gi
+    limits.cpu: "16"
+    limits.memory: 16Gi
+    pods: "24"
+    persistentvolumeclaims: "4"
+---
+apiVersion: v1
+kind: LimitRange
+metadata:
+  name: tazama
+spec:
+  limits:
+    # A container with no limit can starve every other pod in the project. The default
+    # makes forgetting one harmless rather than an outage.
+    - type: Container
+      default:        { cpu: 500m, memory: 512Mi }
+      defaultRequest: { cpu: 100m, memory: 256Mi }
+      max:            { cpu: "4",  memory: 4Gi }
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: tazama-config
+data:
+  # Non-secret configuration only. Everything here is safe to read in the cluster.
+  APP_MODE: "live"
+  ALLOW_LIVE_WRITES: "false"          # must be flipped deliberately, per the config rules
+  DISPLAY_TZ: "Africa/Nairobi"
+  LOG_LEVEL: "INFO"
+  LOG_FORMAT: "json"                  # ELK compatible, standard 3.1
+  AUTH_MODE: "oidc"
+  RATE_LIMIT_PER_MIN: "600"
+  TEAMS_DRY_RUN: "true"               # delivery is enabled per environment, never by default
+  OTEL_SERVICE_NAME: "tazama-api"
+  METRICS_ENABLED: "true"
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: tazama-web-config
+data:
+  NEXT_PUBLIC_APP_MODE: "live"
+  NODE_ENV: "production"
+---
+# Secrets are NOT in git. This documents the keys the deployment expects; the values are
+# created once per environment by the platform team, or injected from the cluster's
+# secret store. `make openshift-secret` prints the command without the values.
+apiVersion: v1
+kind: Secret
+metadata:
+  name: tazama-secrets
+  annotations:
+    tazama.io/managed-by: "platform team, out of band"
+type: Opaque
+stringData:
+  DB_DSN: "REPLACE_IN_CLUSTER"
+  DB_USER: "REPLACE_IN_CLUSTER"
+  DB_PASSWORD: "REPLACE_IN_CLUSTER"
+  JWT_SECRET: "REPLACE_IN_CLUSTER"
+  PSEUDONYM_SALT: "REPLACE_IN_CLUSTER"
+  OIDC_ISSUER: "REPLACE_IN_CLUSTER"
+  OIDC_CLIENT_ID: "REPLACE_IN_CLUSTER"
+  OIDC_CLIENT_SECRET: "REPLACE_IN_CLUSTER"
+  LLM_BASE_URL: "REPLACE_IN_CLUSTER"
+  LLM_API_KEY: "REPLACE_IN_CLUSTER"
+  TEAMS_WEBHOOK_URL: "REPLACE_IN_CLUSTER"

@@ -1,0 +1,123 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: tazama-api
+  labels: { app.kubernetes.io/name: tazama, app.kubernetes.io/component: api }
+spec:
+  replicas: 2
+  revisionHistoryLimit: 5
+  selector:
+    matchLabels: { app.kubernetes.io/name: tazama, app.kubernetes.io/component: api }
+  strategy:
+    type: RollingUpdate
+    rollingUpdate: { maxSurge: 1, maxUnavailable: 0 }   # never drop below capacity
+  template:
+    metadata:
+      labels: { app.kubernetes.io/name: tazama, app.kubernetes.io/component: api }
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8000"
+        prometheus.io/path: "/metrics"
+    spec:
+      # 30s is the longest request we allow plus headroom. On SIGTERM the server stops
+      # accepting new connections and finishes in-flight ones; the preStop sleep gives the
+      # router time to remove this pod from rotation first, which is what prevents the
+      # 502s that otherwise appear on every deploy.
+      terminationGracePeriodSeconds: 45
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile: { type: RuntimeDefault }
+      # Spread replicas across nodes so a single node failure cannot take the service down.
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels: { app.kubernetes.io/name: tazama, app.kubernetes.io/component: api }
+      containers:
+        - name: api
+          image: tazama/backend:replaced-by-ci
+          imagePullPolicy: IfNotPresent
+          ports: [{ name: http, containerPort: 8000 }]
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: ["ALL"] }
+          envFrom:
+            - configMapRef: { name: tazama-config }
+            - secretRef: { name: tazama-secrets }
+          # Liveness and readiness must mean different things, or there is no point having
+          # both. Liveness asks whether the process is wedged and should be killed.
+          # Readiness asks whether its dependencies are usable and traffic should be sent.
+          # Pointing both at the same endpoint turns a database blip into a restart loop.
+          startupProbe:
+            httpGet: { path: /healthz, port: http }
+            periodSeconds: 3
+            failureThreshold: 30          # up to 90s for a cold start, then give up
+          livenessProbe:
+            httpGet: { path: /healthz, port: http }
+            periodSeconds: 15
+            timeoutSeconds: 3
+            failureThreshold: 3
+          readinessProbe:
+            httpGet: { path: /readyz, port: http }
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          lifecycle:
+            preStop:
+              exec: { command: ["sleep", "10"] }
+          resources:
+            requests: { cpu: 250m, memory: 512Mi }
+            limits:   { cpu: "2",  memory: 1Gi }
+          volumeMounts:
+            - { name: tmp, mountPath: /tmp }
+            - { name: cache, mountPath: /app/.cache }
+      volumes:
+        # readOnlyRootFilesystem is on, so anything that writes needs an explicit mount.
+        - name: tmp
+          emptyDir: { medium: Memory, sizeLimit: 64Mi }
+        - name: cache
+          emptyDir: { sizeLimit: 256Mi }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: tazama-api
+  labels: { app.kubernetes.io/name: tazama, app.kubernetes.io/component: api }
+spec:
+  selector: { app.kubernetes.io/name: tazama, app.kubernetes.io/component: api }
+  ports: [{ name: http, port: 8000, targetPort: http }]
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: tazama-api
+spec:
+  scaleTargetRef: { apiVersion: apps/v1, kind: Deployment, name: tazama-api }
+  minReplicas: 2
+  maxReplicas: 8
+  metrics:
+    - type: Resource
+      resource: { name: cpu, target: { type: Utilization, averageUtilization: 70 } }
+    - type: Resource
+      resource: { name: memory, target: { type: Utilization, averageUtilization: 80 } }
+  behavior:
+    scaleUp:
+      # React quickly to a surge, which is the whole point during an incident.
+      stabilizationWindowSeconds: 30
+      policies: [{ type: Percent, value: 100, periodSeconds: 30 }]
+    scaleDown:
+      # Shrink slowly, so a brief lull does not remove capacity that is about to be needed.
+      stabilizationWindowSeconds: 300
+      policies: [{ type: Pods, value: 1, periodSeconds: 120 }]
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: tazama-api
+spec:
+  # Keeps a node drain from taking the API down entirely during cluster maintenance.
+  minAvailable: 1
+  selector:
+    matchLabels: { app.kubernetes.io/name: tazama, app.kubernetes.io/component: api }

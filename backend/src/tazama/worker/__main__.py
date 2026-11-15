@@ -17,6 +17,7 @@ import signal
 import sys
 import time
 from dataclasses import dataclass
+from pathlib import Path
 from types import FrameType
 
 from tazama.core.clock import SystemClock
@@ -35,6 +36,22 @@ _log = get_logger(__name__)
 #: feels live, long enough not to hammer the database.
 IDLE_SLEEP_S = 2.0
 BUSY_SLEEP_S = 0.1
+
+#: Touched once per completed loop. The container's liveness probe checks its age, because
+#: the failure worth catching is a worker that is *running but no longer making progress*
+#: — a wedged database call, a consumer stuck on a poison message. A process-alive check
+#: cannot see that, and the pod would sit there healthy and idle until somebody noticed
+#: the outbox backing up. Deliberately a file rather than a port: the worker serves no
+#: HTTP, and opening one just for a probe adds an attack surface for no gain.
+HEARTBEAT_PATH = Path(os.environ.get("TAZAMA_WORKER_HEARTBEAT", "/tmp/worker-heartbeat"))  # noqa: S108
+
+
+def _beat() -> None:
+    """Record that a loop iteration completed. Never fatal: a read-only or missing
+    directory should not take down a worker that is otherwise doing its job."""
+    with contextlib.suppress(OSError):
+        HEARTBEAT_PATH.parent.mkdir(parents=True, exist_ok=True)
+        HEARTBEAT_PATH.write_text(str(time.time()), encoding="utf-8")
 
 
 @dataclass
@@ -98,6 +115,7 @@ def run(settings: Settings | None = None, *, max_ticks: int | None = None) -> in
         ticks += 1
         report = dispatcher.poll_once()
         scheduler.tick()
+        _beat()
         if report.dead_lettered:
             _log.error("worker_dead_letters", extra={"count": report.dead_lettered})
         if max_ticks is None:

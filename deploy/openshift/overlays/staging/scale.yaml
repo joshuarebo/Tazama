@@ -1,0 +1,5 @@
+# Staging runs one of each. It exists to prove the deployment path and to run shadow mode,
+# not to carry load.
+- op: replace
+  path: /spec/replicas
+  value: 1
