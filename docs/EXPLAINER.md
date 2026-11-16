@@ -5,6 +5,101 @@ Written to be read once and then spoken from memory.
 
 ---
 
+## Part 0. Running it
+
+### The one command
+
+From the repository root:
+
+```
+make demo
+```
+
+On Windows, where GNU `make` usually is not installed, these are the same thing:
+
+```
+./make.ps1 demo
+python scripts/mk.py demo
+```
+
+That does the whole clean-machine path: creates `.env` with freshly generated local
+secrets, installs backend and frontend dependencies, applies migrations, seeds the
+synthetic data, runs detection so there are actual incidents to look at, builds the data
+catalog, then starts four processes and leaves them running.
+
+When it settles you will see:
+
+| | |
+|---|---|
+| **Console** | <http://localhost:3000> |
+| **API docs** | <http://localhost:8000/docs> |
+| **Model server** | <http://127.0.0.1:8088> |
+
+Open the console, pick a role on the sign-in screen, and start at the Command Center.
+**Admin** holds every capability, so use that unless you are specifically demonstrating
+that roles see different things.
+
+`Ctrl+C` stops everything.
+
+### What you need installed first
+
+- **Python 3.12 or 3.13**
+- **Node 20 or newer**
+- **Docker**, only for the Oracle integration tests. The demo runs on SQLite without it.
+
+If something does not start:
+
+```
+make doctor
+```
+
+That checks the environment, the config, the database, the model endpoint and the vector
+backend, and prints the fix rather than a stack trace.
+
+### The model server, and why it matters for a demo
+
+`make demo` starts a small deterministic model server on port 8088 and points the app at
+it. It is local, it is offline, and nothing leaves the machine.
+
+This matters because without it every AI panel shows **AI degraded** and falls back to the
+rules. That fallback is real and worth demonstrating, but you want to choose when to show
+it rather than discover it live.
+
+**To demonstrate the degraded path on purpose:** stop the model server, reload the console,
+and show that every screen still works and says which path answered. That is one of the
+strongest moments in the walkthrough. Start it again with `make fake-llm`.
+
+### Running pieces separately
+
+Useful when you are iterating rather than demoing.
+
+| Command | What it starts |
+|---|---|
+| `make api` | API on :8000 with reload |
+| `make web` | Console on :3000 |
+| `make worker` | Event worker and scheduler |
+| `make fake-llm` | Deterministic model server on :8088 |
+| `make seed` | Re-seed the synthetic data |
+| `make pipeline` | Re-run detection over the seeded data |
+
+### Resetting
+
+```
+make clean
+make demo
+```
+
+The seed uses a fixed random seed, so the same data comes back every time and the numbers
+in this document stay correct.
+
+### The offline version
+
+`docs/demo/tazama-demo.html` is a single file that replicates the console with the same
+data. No install, no server, works offline. That is the one to email to somebody who
+should see the product without a laptop setup.
+
+---
+
 ## Part 1. The problem, in plain language
 
 ### The one sentence

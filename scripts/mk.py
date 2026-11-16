@@ -15,7 +15,6 @@ from __future__ import annotations
 
 import os
 import platform
-import secrets
 import shutil
 import subprocess
 import sys
@@ -23,6 +22,11 @@ import time
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
+
+# Imported by name on purpose: the module-level `secrets()` task below (the secret-scan
+# target) shadows the stdlib module, so `import secrets` then `secrets.token_urlsafe`
+# resolves to an attribute on that function and raises at runtime.
+from secrets import token_urlsafe
 
 ROOT = Path(__file__).resolve().parent.parent
 BACKEND = ROOT / "backend"
@@ -128,7 +132,7 @@ def ensure_env_file() -> None:
         key, sep, value = line.partition("=")
         if sep and key.strip() in ("PSEUDONYM_SALT", "JWT_SECRET") and "replace" in value.lower():
             # token_urlsafe(36) is 48 characters, comfortably over MIN_SECRET_LEN.
-            lines.append(f"{key}={secrets.token_urlsafe(36)}")
+            lines.append(f"{key}={token_urlsafe(36)}")
             generated += 1
         else:
             lines.append(line)
