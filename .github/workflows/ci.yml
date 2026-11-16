@@ -39,7 +39,10 @@ jobs:
           enable-cache: true
 
       - name: install
-        run: uv sync --project backend --extra dev
+        # `ml` as well as `dev`: ai/ml/ imports numpy, lightgbm, sklearn and shap, so
+        # without it mypy cannot resolve them and the types step fails on code that is
+        # perfectly fine. The ml-marked tests need them too. .gitlab-ci.yml installs both.
+        run: uv sync --project backend --extra dev --extra ml
 
       - name: lint (ruff)
         run: |
