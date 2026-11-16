@@ -62,7 +62,7 @@ lint:backend:
   script:
     - uv run --project backend ruff check backend/src backend/tests scripts
     - uv run --project backend ruff format --check backend/src backend/tests scripts
-    - uv run --project backend mypy backend/src
+    - uv run --project backend mypy --config-file backend/pyproject.toml backend/src
     # Module boundaries are a design contract, so a breach fails the build rather than
     # being noticed in review.
     - uv run --project backend lint-imports --config backend/pyproject.toml

@@ -220,7 +220,14 @@ def lint() -> None:
 
 @task("typecheck", "mypy (strict on domain/modules/core) and tsc", "quality")
 def typecheck() -> None:
-    uv_run(["mypy", "src"], cwd=BACKEND)
+    # Same invocation as both CI pipelines, for the same reason the lint target was
+    # aligned: mypy resolves its config relative to the working directory, so running it
+    # from backend/ found the overrides and running it from the repo root did not. The
+    # two disagreed silently, and CI was the one that was right.
+    uv_run(
+        ["mypy", "--config-file", "backend/pyproject.toml", "backend/src"],
+        cwd=ROOT,
+    )
     if (WEB / "node_modules").exists():
         run([npm(), "run", "typecheck"], cwd=WEB)
     else:
