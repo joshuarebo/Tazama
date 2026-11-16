@@ -91,11 +91,32 @@ async def _vector_probe(settings: Settings) -> Check:
     )
 
 
+#: Marks the one failure that is expected before `make migrate` has ever run.
+#: Readiness still reports it as down, because a pod without an outbox table
+#: genuinely cannot serve. `scripts/doctor.py` reads this marker and downgrades it
+#: to a warning, because doctor exists to be run *before* the schema is created.
+SCHEMA_MISSING = "schema not migrated"
+
+
 async def _outbox_probe(settings: Settings) -> Check:
     outbox_lag = _resolve("tazama.infrastructure.eventbus", "outbox_lag")
     if outbox_lag is None:
         return Check(name="outbox", status="skipped", detail="not implemented until Phase 2")
-    lag, pending = await outbox_lag(settings)
+    try:
+        lag, pending = await outbox_lag(settings)
+    except Exception as exc:
+        # "No schema yet" and "the database is unreachable" are different problems with
+        # different fixes, and collapsing them into one OperationalError tells an
+        # operator nothing. A fresh checkout, and any CI job using an in-memory SQLite,
+        # legitimately has no tables yet.
+        text = str(exc).lower()
+        if "no such table" in text or "does not exist" in text or "ora-00942" in text:
+            return Check(
+                name="outbox",
+                status="down",
+                detail=f"{SCHEMA_MISSING}: run `make migrate`",
+            )
+        return Check(name="outbox", status="down", detail=f"{type(exc).__name__}: {exc}")
     # Sustained lag means events are piling up: see docs/runbooks/outbox-backlog.md.
     status: CheckStatus = "ok" if lag < 60 else "degraded"
     return Check(name="outbox", status=status, detail=f"lag={lag:.1f}s pending={pending}")

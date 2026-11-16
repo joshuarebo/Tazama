@@ -510,6 +510,19 @@ def _check_banned_names(tree: exp.Expr) -> None:
 
 
 def _check_shape(tree: exp.Expr) -> None:
+    # A SELECT with no projections. sqlglot parses a bare `SELECT` quite happily, and it
+    # only becomes a problem later: the guard appends its mandatory row cap and produces
+    # `SELECT LIMIT 1000`, which is not valid SQL, so rendering it raised ParseError out
+    # of the guard instead of a clean refusal. That is a 500 where the caller should have
+    # got a 400. Found by the hypothesis property test, which is exactly the kind of
+    # degenerate input a human would never think to try.
+    for select in tree.find_all(exp.Select):
+        if not select.expressions:
+            raise _reject(
+                "no-projection",
+                "The statement selects no columns. Name the columns you want.",
+            )
+
     joins = sum(1 for _ in tree.find_all(exp.Join))
     if joins > MAX_JOINS:
         raise _reject(

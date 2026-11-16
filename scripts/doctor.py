@@ -240,12 +240,22 @@ def check_dependencies() -> Result:
 
 def check_readiness(settings: object) -> list[Result]:
     try:
-        from tazama.api.readiness import run_checks
+        from tazama.api.readiness import SCHEMA_MISSING, run_checks
     except Exception as exc:
         return [Result("readiness probes", WARN, f"{type(exc).__name__}: {exc}")]
     checks = asyncio.run(run_checks(settings))  # type: ignore[arg-type]
     mapping = {"ok": OK, "degraded": WARN, "skipped": WARN, "down": FAIL}
-    return [Result(f"probe:{check.name}", mapping[check.status], check.detail) for check in checks]
+    results = []
+    for check in checks:
+        level = mapping[check.status]
+        # doctor's whole job is to be run on a machine that is not set up yet, so "the
+        # schema has not been created" is the expected state, not a blocking fault. It
+        # stays `down` for readiness, where a pod without an outbox table really cannot
+        # serve.
+        if SCHEMA_MISSING in check.detail:
+            level = WARN
+        results.append(Result(f"probe:{check.name}", level, check.detail))
+    return results
 
 
 def check_mappings() -> Result:
