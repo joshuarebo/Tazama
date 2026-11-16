@@ -116,7 +116,12 @@ async def _outbox_probe(settings: Settings) -> Check:
                 status="down",
                 detail=f"{SCHEMA_MISSING}: run `make migrate`",
             )
-        return Check(name="outbox", status="down", detail=f"{type(exc).__name__}: {exc}")
+        # Anything else is re-raised so `_timed` handles it the way every other probe's
+        # failure is handled: the full text goes to the log, and the response carries only
+        # the exception class. `/readyz` is served over HTTP, and a database error string
+        # can contain the DSN, the host or a username. The message above is safe to
+        # return because it is a fixed string, not the exception.
+        raise
     # Sustained lag means events are piling up: see docs/runbooks/outbox-backlog.md.
     status: CheckStatus = "ok" if lag < 60 else "degraded"
     return Check(name="outbox", status=status, detail=f"lag={lag:.1f}s pending={pending}")

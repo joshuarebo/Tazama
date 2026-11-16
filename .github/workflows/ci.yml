@@ -108,11 +108,21 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - name: gitleaks
+      # gitleaks-action requires a paid licence key for organisation repositories and
+      # fails the step without one. It is kept because it is a good scanner and the
+      # licence may exist later, but it cannot be the gate: an unlicensed tool failing is
+      # not the same as a secret being found, and treating it as such trains people to
+      # ignore a red secret scan, which is the worst possible habit for this particular
+      # check. The detect-secrets pass below is the enforcing gate and needs no licence.
+      - name: gitleaks (advisory; needs a licence key for orgs)
         uses: gitleaks/gitleaks-action@v2
+        continue-on-error: true
         env:
           GITLEAKS_ENABLE_UPLOAD_ARTIFACT: "false"
-      - name: fallback scanner (also checks for committed env files)
+          GITLEAKS_LICENSE: ${{ secrets.GITLEAKS_LICENSE }}
+      - name: secret scan (enforcing; also checks for committed env files)
+        # `always()` so a gitleaks licence problem can never skip the real gate.
+        if: always()
         run: python scripts/scan_secrets.py
 
   frontend:
