@@ -68,13 +68,19 @@ def check_python() -> Result:
     return Result("python", OK, current)
 
 
-def check_tool(name: str, *, required: bool, fix: str, version_args: tuple[str, ...] = ("--version",)) -> Result:
+def check_tool(
+    name: str,
+    *,
+    required: bool,
+    fix: str,
+    version_args: tuple[str, ...] = ("--version",),
+) -> Result:
     path = shutil.which(name)
     if path is None:
         return Result(name, FAIL if required else WARN, "not found", fix)
     detail = ""
     try:
-        probe = subprocess.run(  # noqa: S603
+        probe = subprocess.run(
             [path, *version_args],
             capture_output=True,
             text=True,
@@ -95,7 +101,7 @@ def check_docker_daemon() -> Result:
             "docker CLI not found",
             "Oracle integration tests and `make up` need Docker Desktop; demo mode does not",
         )
-    probe = subprocess.run(  # noqa: S603, S607
+    probe = subprocess.run(
         ["docker", "info", "--format", "{{.ServerVersion}}"],
         capture_output=True,
         text=True,
@@ -106,7 +112,8 @@ def check_docker_daemon() -> Result:
             "docker daemon",
             WARN,
             "not running",
-            "start Docker Desktop if you want the Oracle backend; sqlite demo mode works without it",
+            "start Docker Desktop if you want the Oracle backend; "
+            "sqlite demo mode works without it",
         )
     return Result("docker daemon", OK, probe.stdout.strip())
 
@@ -201,7 +208,7 @@ def check_secret_placeholders(settings: object) -> Result:
                 "secrets",
                 WARN,
                 "placeholder PSEUDONYM_SALT (fine locally, never beyond dev)",
-                "generate one: python -c \"import secrets;print(secrets.token_urlsafe(32))\"",
+                'generate one: python -c "import secrets;print(secrets.token_urlsafe(32))"',
             )
         return Result("secrets", OK, "set")
     return Result("secrets", OK, "validated by settings for this APP_ENV")
@@ -211,7 +218,15 @@ def check_secret_placeholders(settings: object) -> Result:
 
 
 def check_dependencies() -> Result:
-    required = ("fastapi", "pydantic", "pydantic_settings", "sqlalchemy", "alembic", "sqlglot", "jwt")
+    required = (
+        "fastapi",
+        "pydantic",
+        "pydantic_settings",
+        "sqlalchemy",
+        "alembic",
+        "sqlglot",
+        "jwt",
+    )
     missing = [name for name in required if importlib.util.find_spec(name) is None]
     if missing:
         return Result(
@@ -230,10 +245,7 @@ def check_readiness(settings: object) -> list[Result]:
         return [Result("readiness probes", WARN, f"{type(exc).__name__}: {exc}")]
     checks = asyncio.run(run_checks(settings))  # type: ignore[arg-type]
     mapping = {"ok": OK, "degraded": WARN, "skipped": WARN, "down": FAIL}
-    return [
-        Result(f"probe:{check.name}", mapping[check.status], check.detail)
-        for check in checks
-    ]
+    return [Result(f"probe:{check.name}", mapping[check.status], check.detail) for check in checks]
 
 
 def check_mappings() -> Result:

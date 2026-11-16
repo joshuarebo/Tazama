@@ -38,8 +38,8 @@ def main() -> int:
 
     service = build_discovery_service(settings)
     mapping_report = service.validate_mappings()
-    print(mapping_report.render())  # noqa: T201
-    print()  # noqa: T201
+    print(mapping_report.render())
+    print()
 
     snapshot = service.profile_all(
         ProfileRequest(depth="shallow" if args.shallow else "full"),
@@ -49,15 +49,15 @@ def main() -> int:
     out_path.write_text(snapshot.to_markdown(), encoding="utf-8")
 
     if snapshot.coverage is not None:
-        print(snapshot.coverage.render())  # noqa: T201
-        print()  # noqa: T201
+        print(snapshot.coverage.render())
+        print()
 
     try:
         relative = out_path.relative_to(ROOT)
     except ValueError:  # an absolute path outside the repo is fine too
         relative = out_path
     # ASCII only: a Windows console in cp1252 would mangle anything else.
-    print(  # noqa: T201
+    print(
         f"wrote {relative} - {len(snapshot.tables)} tables, {snapshot.total_rows:,} rows",
     )
     # A broken mapping is a configuration error worth failing the command for.

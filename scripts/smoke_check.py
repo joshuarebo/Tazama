@@ -113,7 +113,11 @@ def run(base: str) -> list[Result]:
             response = _get(client, "/api/v1/healthz")
             missing = [h for h in REQUIRED_HEADERS if h not in response.headers]
             results.append(
-                Result("security headers", not missing, f"missing={missing}" if missing else "all present")
+                Result(
+                    "security headers",
+                    not missing,
+                    f"missing={missing}" if missing else "all present",
+                )
             )
         except Exception as exc:
             results.append(Result("security headers", False, str(exc)))
@@ -146,13 +150,13 @@ def main(argv: list[str]) -> int:
     width = max(len(r.name) for r in results)
     for result in results:
         mark = "PASS" if result.ok else "FAIL"
-        print(f"  {mark}  {result.name.ljust(width)}  {result.detail}")  # noqa: T201
+        print(f"  {mark}  {result.name.ljust(width)}  {result.detail}")
 
     failed = [r for r in results if not r.ok]
     if failed:
-        print(f"\nsmoke check FAILED: {len(failed)} of {len(results)}")  # noqa: T201
+        print(f"\nsmoke check FAILED: {len(failed)} of {len(results)}")
         return 1
-    print(f"\nsmoke check passed: {len(results)} checks")  # noqa: T201
+    print(f"\nsmoke check passed: {len(results)} checks")
     return 0
 
 

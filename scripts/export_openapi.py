@@ -21,7 +21,7 @@ def main() -> int:
     OUT.parent.mkdir(parents=True, exist_ok=True)
     OUT.write_text(json.dumps(document, indent=2, sort_keys=True), encoding="utf-8")
     paths = len(document.get("paths", {}))
-    print(f"wrote {OUT.relative_to(ROOT)} ({paths} paths)")  # noqa: T201
+    print(f"wrote {OUT.relative_to(ROOT)} ({paths} paths)")
     return 0
 
 

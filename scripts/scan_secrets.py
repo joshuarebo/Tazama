@@ -15,10 +15,33 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 
 SKIP_DIRS = {
-    ".git", "node_modules", ".venv", "venv", "__pycache__", ".next", "dist", "build",
-    ".mypy_cache", ".ruff_cache", ".pytest_cache", "htmlcov", "artifacts", "data",
+    ".git",
+    "node_modules",
+    ".venv",
+    "venv",
+    "__pycache__",
+    ".next",
+    "dist",
+    "build",
+    ".mypy_cache",
+    ".ruff_cache",
+    ".pytest_cache",
+    "htmlcov",
+    "artifacts",
+    "data",
 }
-SKIP_SUFFIXES = {".lock", ".png", ".jpg", ".jpeg", ".gif", ".ico", ".woff", ".woff2", ".pdf", ".zip"}
+SKIP_SUFFIXES = {
+    ".lock",
+    ".png",
+    ".jpg",
+    ".jpeg",
+    ".gif",
+    ".ico",
+    ".woff",
+    ".woff2",
+    ".pdf",
+    ".zip",
+}
 
 # Files that legitimately document the *shape* of a secret.
 ALLOWLIST_FILES = {".env.example", "scan_secrets.py", "security-baseline.md", "threat-model.md"}
@@ -30,7 +53,10 @@ RULES: list[tuple[str, re.Pattern[str]]] = [
     ("slack-token", re.compile(r"\bxox[abprs]-[A-Za-z0-9-]{10,}\b")),
     ("jwt", re.compile(r"\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\b")),
     ("teams-webhook", re.compile(r"https://[a-z0-9.-]*logic\.azure\.com[^\s\"']*")),
-    ("power-automate-webhook", re.compile(r"https://prod-\d+\.[a-z0-9-]+\.logic\.azure\.com[^\s\"']*")),
+    (
+        "power-automate-webhook",
+        re.compile(r"https://prod-\d+\.[a-z0-9-]+\.logic\.azure\.com[^\s\"']*"),
+    ),
     ("office365-connector", re.compile(r"https://outlook\.office\.com/webhook/[^\s\"']+")),
     ("url-with-credentials", re.compile(r"[a-z][a-z0-9+.-]*://[^/\s:@]+:[^/\s@]{3,}@")),
     (
@@ -65,7 +91,7 @@ ALLOWLIST_MARKER = "pragma: allowlist secret"
 
 
 def tracked_files() -> list[Path]:
-    probe = subprocess.run(  # noqa: S603, S607
+    probe = subprocess.run(
         ["git", "ls-files"],
         cwd=ROOT,
         capture_output=True,
@@ -116,11 +142,11 @@ def main() -> int:
         findings.append(f"{rel}: an environment file must never be committed")
 
     if findings:
-        print("secret scan FAILED:")  # noqa: T201
+        print("secret scan FAILED:")
         for finding in sorted(set(findings)):
-            print(f"  {finding}")  # noqa: T201
+            print(f"  {finding}")
         return 1
-    print("secret scan: clean")  # noqa: T201
+    print("secret scan: clean")
     return 0
 
 

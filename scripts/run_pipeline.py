@@ -63,21 +63,21 @@ def main() -> int:
             select(func.count()).select_from(m.Complaint),
         ).scalar_one()
     if latest is None:
-        print("no KPI data found - run `make seed` first")  # noqa: T201
+        print("no KPI data found - run `make seed` first")
         return 1
     if latest.tzinfo is None:
         latest = latest.replace(tzinfo=UTC)
 
     window = TimeWindow(start=latest - timedelta(hours=args.hours), end=latest + timedelta(hours=1))
     clock = FixedClock(window.end)
-    print(f"scanning {window.start.isoformat()} .. {window.end.isoformat()}")  # noqa: T201
-    print(f"complaints in the database: {complaints_total:,}")  # noqa: T201
+    print(f"scanning {window.start.isoformat()} .. {window.end.isoformat()}")
+    print(f"complaints in the database: {complaints_total:,}")
 
     # 1. Network first: find the degradations nobody has complained about yet.
     with unit_of_work(engine=engine, settings=settings, clock=clock) as services:
         degradations = services.correlation.detect_degradations(window)
     raised = sum(1 for outcome in degradations if getattr(outcome, "raised_incident", False))
-    print(f"degradation scan: {len(degradations)} candidate(s), {raised} incident(s) raised")  # noqa: T201
+    print(f"degradation scan: {len(degradations)} candidate(s), {raised} incident(s) raised")
 
     # 2. Classify and correlate the complaints in the window, in event-time order.
     with session_factory(engine)() as session:
@@ -99,7 +99,7 @@ def main() -> int:
             .where(m.Complaint.cell_id.is_not(None))
             .order_by(m.Complaint.received_at, m.Complaint.id),
         ).all()
-    print(f"located complaints in window: {len(rows):,}")  # noqa: T201
+    print(f"located complaints in window: {len(rows):,}")
 
     enriched = 0
     attached = 0
@@ -143,7 +143,7 @@ def main() -> int:
                     stored.incident_id = outcome.incident_id
                     stored.status = "correlated"
                     attached += 1
-    print(f"classified {enriched:,} complaint(s); attached {attached:,} to incidents")  # noqa: T201
+    print(f"classified {enriched:,} complaint(s); attached {attached:,} to incidents")
 
     # 2b. Back-fill `complaint.incident_id` from correlation's own links.
     #
@@ -168,7 +168,7 @@ def main() -> int:
                 complaint.incident_id = incident_id
                 complaint.status = "correlated"
                 back_filled += 1
-    print(f"back-filled {back_filled:,} complaint(s) from incident links")  # noqa: T201
+    print(f"back-filled {back_filled:,} complaint(s) from incident links")
 
     # 3. Impact, priority and routing for every live incident.
     with session_factory(engine)() as session:
@@ -249,15 +249,17 @@ def main() -> int:
             select(func.count()).select_from(m.Incident).where(m.Incident.status == "suppressed"),
         ).scalar_one()
         correlated = session.execute(
-            select(func.count()).select_from(m.Complaint).where(m.Complaint.incident_id.is_not(None)),
+            select(func.count())
+            .select_from(m.Complaint)
+            .where(m.Complaint.incident_id.is_not(None)),
         ).scalar_one()
 
-    print()  # noqa: T201
-    print("incidents by priority:")  # noqa: T201
+    print()
+    print("incidents by priority:")
     for priority, count in live:
-        print(f"  {priority}: {count}")  # noqa: T201
-    print(f"  suppressed: {suppressed}")  # noqa: T201
-    print(f"complaints attached to an incident: {correlated:,} of {complaints_total:,}")  # noqa: T201
+        print(f"  {priority}: {count}")
+    print(f"  suppressed: {suppressed}")
+    print(f"complaints attached to an incident: {correlated:,} of {complaints_total:,}")
     return 0
 
 

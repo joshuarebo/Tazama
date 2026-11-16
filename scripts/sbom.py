@@ -40,7 +40,7 @@ def node_components() -> list[dict[str, object]]:
     web = ROOT / "web"
     if not (web / "node_modules").exists():
         return []
-    probe = subprocess.run(  # noqa: S603, S607
+    probe = subprocess.run(
         ["npm", "ls", "--all", "--json", "--omit", "dev"],
         cwd=web,
         capture_output=True,
@@ -102,7 +102,7 @@ def main() -> int:
     }
     OUT.parent.mkdir(parents=True, exist_ok=True)
     OUT.write_text(json.dumps(document, indent=2), encoding="utf-8")
-    print(f"wrote {OUT.relative_to(ROOT)} with {len(components)} components")  # noqa: T201
+    print(f"wrote {OUT.relative_to(ROOT)} with {len(components)} components")
     return 0
 
 

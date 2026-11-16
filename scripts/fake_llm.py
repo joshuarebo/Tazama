@@ -95,7 +95,13 @@ def _tokens(text: str) -> int:
     return max(1, len(text) // 4)
 
 
-def _envelope(model: str, content: str, prompt: str, *, tool_calls: list[dict[str, Any]] | None = None) -> dict[str, Any]:
+def _envelope(
+    model: str,
+    content: str,
+    prompt: str,
+    *,
+    tool_calls: list[dict[str, Any]] | None = None,
+) -> dict[str, Any]:
     message: dict[str, Any] = {"role": "assistant", "content": content}
     if tool_calls:
         message["tool_calls"] = tool_calls
@@ -129,8 +135,14 @@ def _task_response(task: str, prompt: str) -> str:
     rng = _seed(prompt)
     if task == "classify_complaint":
         categories = [
-            "no_service", "slow_data", "call_drops", "billing", "sim_swap",
-            "network_congestion", "voice_quality", "other",
+            "no_service",
+            "slow_data",
+            "call_drops",
+            "billing",
+            "sim_swap",
+            "network_congestion",
+            "voice_quality",
+            "other",
         ]
         category = categories[rng % len(categories)]
         return json.dumps(
@@ -147,8 +159,12 @@ def _task_response(task: str, prompt: str) -> str:
         )
     if task == "diagnose_incident":
         causes = [
-            "transmission_link_failure", "cell_outage", "congestion",
-            "power_failure", "configuration_change", "planned_maintenance",
+            "transmission_link_failure",
+            "cell_outage",
+            "congestion",
+            "power_failure",
+            "configuration_change",
+            "planned_maintenance",
         ]
         return json.dumps(
             {
@@ -297,14 +313,23 @@ async def chat(
         )
     if behaviour == "schema-violation":
         return JSONResponse(
-            content=_envelope(body.model, json.dumps({"unexpected": True, "confidence": "high"}), prompt),
+            content=_envelope(
+                body.model,
+                json.dumps({"unexpected": True, "confidence": "high"}),
+                prompt,
+            ),
         )
     if behaviour == "empty":
         return JSONResponse(content=_envelope(body.model, "", prompt))
     if behaviour == "no-tools":
         return JSONResponse(
             status_code=400,
-            content={"error": {"message": "this model does not support tools", "code": "tools_unsupported"}},
+            content={
+                "error": {
+                    "message": "this model does not support tools",
+                    "code": "tools_unsupported",
+                }
+            },
         )
     if behaviour == "injected":
         # Deliberately leaks the canary so the output filter can be proven to catch it.
@@ -336,7 +361,11 @@ async def chat(
         )
 
     task_match = TASK_RE.search(prompt)
-    content = _task_response(task_match.group(1).lower(), prompt) if task_match else _default_answer(prompt)
+    content = (
+        _task_response(task_match.group(1).lower(), prompt)
+        if task_match
+        else _default_answer(prompt)
+    )
     return JSONResponse(content=_envelope(body.model, content, prompt))
 
 
@@ -397,7 +426,7 @@ def main() -> None:
 
     host = os.environ.get("FAKE_LLM_HOST", "127.0.0.1")
     port = int(os.environ.get("FAKE_LLM_PORT", "8088"))
-    print(f"fake LLM on http://{host}:{port}/v1  (set LLM_BASE_URL to this)")  # noqa: T201
+    print(f"fake LLM on http://{host}:{port}/v1  (set LLM_BASE_URL to this)")
     uvicorn.run(app, host=host, port=port, log_level="warning")
 
 

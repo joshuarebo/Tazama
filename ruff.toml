@@ -1,0 +1,33 @@
+# Repository-root ruff configuration.
+#
+# Why this file exists: the project's rules live in `backend/pyproject.toml`, which ruff
+# only applies to files underneath `backend/`. `scripts/` sits outside it, so ruff fell
+# back to its own defaults there. That had two consequences, and together they kept CI red
+# from October while `make lint` stayed green locally:
+#
+#   * the project's `# noqa: T201` / `# noqa: S603` directives became "unused" under a
+#     config where those rules are not selected, so every one became a RUF100 error;
+#   * rules the project does not select (EXE001, BLE001, ASYNC251) started firing, and
+#     EXE001 is Linux-only — it checks the executable bit, which ruff cannot read on
+#     Windows. So the failure was invisible on a Windows machine by construction.
+#
+# Extending the backend config means `scripts/` is now held to exactly the same rules as
+# the rest of the codebase, and `make lint` runs the same paths CI runs so the two cannot
+# drift apart again.
+
+extend = "backend/pyproject.toml"
+
+[lint.per-file-ignores]
+# `scripts/` holds operator-facing command line tools. This mirrors the `tests/**` entry
+# already in backend/pyproject.toml, and for the same reason: these rules protect library
+# code from habits that are the entire point of a CLI.
+#
+#   T201  print IS the interface for doctor, seed, catalog and the task runner
+#   S603  every subprocess call site is a fixed argv built in code, never user input
+#   S607  `npm`, `uv`, `docker` and `git` are resolved from PATH deliberately, because
+#         hardcoding an absolute path would break on every machine
+#   ARG001 the fake LLM server's handlers take FastAPI's `request` whether or not a given
+#         route reads it
+#
+# Line length is NOT ignored: long lines are as unreadable in a script as anywhere else.
+"scripts/**" = ["T201", "S603", "S607", "ARG001"]

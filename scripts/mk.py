@@ -65,7 +65,7 @@ def run(
         say(f"  $ {printable}", DIM)
     merged = {**os.environ, **(env or {})}
     try:
-        completed = subprocess.run(args, cwd=where, env=merged, check=False)  # noqa: S603
+        completed = subprocess.run(args, cwd=where, env=merged, check=False)
     except FileNotFoundError as exc:
         raise TaskFailed(printable, 127) from exc
     if check and completed.returncode != 0:
@@ -104,7 +104,7 @@ def npm() -> str:
 def docker_available() -> bool:
     if not have("docker"):
         return False
-    probe = subprocess.run(  # noqa: S603, S607
+    probe = subprocess.run(
         ["docker", "info", "--format", "{{.ServerVersion}}"],
         capture_output=True,
         text=True,
@@ -203,8 +203,14 @@ def fmt() -> None:
 
 @task("lint", "ruff + import boundaries + frontend lint", "quality")
 def lint() -> None:
-    uv_run(["ruff", "check", "src", "tests"], cwd=BACKEND)
-    uv_run(["ruff", "format", "--check", "src", "tests"], cwd=BACKEND)
+    # Deliberately the same paths, from the same directory, as .github/workflows/ci.yml
+    # and .gitlab-ci.yml. They used to differ: this ran `src tests` from inside backend/
+    # while CI ran `backend/src backend/tests scripts` from the repo root. `scripts/` sat
+    # outside any ruff config, so CI applied different rules there and went red in
+    # October while this stayed green. A gate that disagrees with CI is not a gate.
+    targets = ["backend/src", "backend/tests", "scripts"]
+    uv_run(["ruff", "check", *targets], cwd=ROOT)
+    uv_run(["ruff", "format", "--check", *targets], cwd=ROOT)
     boundaries()
     if (WEB / "node_modules").exists():
         run([npm(), "run", "lint"], cwd=WEB)
@@ -523,7 +529,7 @@ def demo() -> None:
         # first page load. It is deterministic and local: the demo shows the AI paths
         # without a real endpoint and without any data leaving the machine.
         procs.append(
-            subprocess.Popen(  # noqa: S603
+            subprocess.Popen(
                 [
                     uv(),
                     "run",
@@ -536,7 +542,7 @@ def demo() -> None:
             ),
         )
         procs.append(
-            subprocess.Popen(  # noqa: S603
+            subprocess.Popen(
                 [
                     uv(),
                     "run",
@@ -554,14 +560,14 @@ def demo() -> None:
             ),
         )
         procs.append(
-            subprocess.Popen(  # noqa: S603
+            subprocess.Popen(
                 [uv(), "run", "--project", str(BACKEND), "python", "-m", "tazama.worker"],
                 cwd=BACKEND,
             ),
         )
         if (WEB / "package.json").exists():
             procs.append(
-                subprocess.Popen([npm(), "run", "dev"], cwd=WEB),  # noqa: S603
+                subprocess.Popen([npm(), "run", "dev"], cwd=WEB),
             )
         while all(p.poll() is None for p in procs):
             time.sleep(1.0)
@@ -608,7 +614,8 @@ def ci() -> None:
 @task("help", "List available targets", "gate")
 def help_task() -> None:
     say(
-        f"{BOLD}TAZAMA task runner{RESET}  (make <target> | ./make.ps1 <target> | py scripts/mk.py <target>)"
+        f"{BOLD}TAZAMA task runner{RESET}  "
+        "(make <target> | ./make.ps1 <target> | py scripts/mk.py <target>)"
     )
     groups: dict[str, list[Task]] = {}
     for item in TASKS.values():

@@ -16,7 +16,12 @@ BACKEND = ROOT / "backend"
 WEB = ROOT / "web"
 IS_WINDOWS = platform.system() == "Windows"
 
-VENV_PY = BACKEND / ".venv" / ("Scripts" if IS_WINDOWS else "bin") / ("python.exe" if IS_WINDOWS else "python")
+VENV_PY = (
+    BACKEND
+    / ".venv"
+    / ("Scripts" if IS_WINDOWS else "bin")
+    / ("python.exe" if IS_WINDOWS else "python")
+)
 PYTHON_EXE = str(VENV_PY) if VENV_PY.exists() else sys.executable
 NPM_CMD = "npm.cmd" if IS_WINDOWS and shutil.which("npm.cmd") else "npm"
 
@@ -73,7 +78,18 @@ def main() -> None:
         else:
             print("[2/3] Starting FastAPI server on http://127.0.0.1:8000 ...")
             p_api = subprocess.Popen(
-                [PYTHON_EXE, "-u", "-m", "uvicorn", "tazama.api.app:asgi", "--factory", "--host", "127.0.0.1", "--port", "8000"],
+                [
+                    PYTHON_EXE,
+                    "-u",
+                    "-m",
+                    "uvicorn",
+                    "tazama.api.app:asgi",
+                    "--factory",
+                    "--host",
+                    "127.0.0.1",
+                    "--port",
+                    "8000",
+                ],
                 cwd=str(BACKEND),
                 env=env,
             )

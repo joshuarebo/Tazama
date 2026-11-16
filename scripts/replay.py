@@ -27,14 +27,14 @@ def main() -> int:
     try:
         from tazama.worker.replay import replay_incident, replay_since
     except ModuleNotFoundError:
-        print("replay lands in Phase 2 (worker/replay.py).")  # noqa: T201
+        print("replay lands in Phase 2 (worker/replay.py).")
         return 0
 
     if args.incident:
         result = replay_incident(args.incident, diff=args.diff)
     else:
         result = replay_since(args.since, diff=args.diff)
-    print(result.render())  # noqa: T201
+    print(result.render())
     return 0 if result.ok else 1
 
 

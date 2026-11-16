@@ -18,10 +18,14 @@ sys.path.insert(0, str(ROOT / "backend" / "src"))
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Seed TAZAMA with deterministic synthetic data")
-    parser.add_argument("--seed", type=int, default=20_251_020, help="random seed (fixed by default)")
+    parser.add_argument(
+        "--seed", type=int, default=20_251_020, help="random seed (fixed by default)"
+    )
     parser.add_argument("--days", type=int, default=30, help="days of KPI history")
     parser.add_argument("--reset", action="store_true", help="truncate seeded tables first")
-    parser.add_argument("--report", action="store_true", help="print the scenario ground-truth table")
+    parser.add_argument(
+        "--report", action="store_true", help="print the scenario ground-truth table"
+    )
     args = parser.parse_args()
 
     from tazama.infrastructure.db.seed import SeedAborted, run_seed
@@ -30,9 +34,9 @@ def main() -> int:
         summary = run_seed(seed=args.seed, days=args.days, reset=args.reset)
     except SeedAborted as refusal:
         # An operator should see the sentence that tells them what to do, not a traceback.
-        print(f"seed aborted: {refusal}")  # noqa: T201
+        print(f"seed aborted: {refusal}")
         return 2
-    print(summary.render(include_scenarios=args.report))  # noqa: T201
+    print(summary.render(include_scenarios=args.report))
     return 0
 
 
