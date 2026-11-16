@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
 from tazama.core.errors import Forbidden, RateLimited
@@ -224,3 +226,42 @@ def test_sanitise_keeps_ordinary_text() -> None:
 def test_constant_time_equals() -> None:
     assert constant_time_equals("abc", "abc")
     assert not constant_time_equals("abc", "abd")
+
+
+# ------------------------------------------------- platform-independent path guard
+
+#: Inputs that are absolute, or traversal, on at least one platform. Every one must be
+#: refused on every platform.
+#:
+#: This block exists because `test_path_traversal_is_refused[C:/Windows/System32/config/SAM]`
+#: passed on Windows and failed on Linux for three weeks without anybody noticing: the
+#: whole suite was only ever run on Windows, where `Path.resolve()` treats a drive letter
+#: as absolute. On Linux the same string is an ordinary relative path. Containment still
+#: held, so it was not an escape, but the control was not the same control in CI and in
+#: the container that actually runs in production.
+CROSS_PLATFORM_HOSTILE = [
+    "C:/Windows/System32/config/SAM",
+    "c:/windows/system32",
+    r"D:\secrets\key.pem",
+    r"\\server\share\file",  # UNC
+    "/etc/passwd",
+    r"\Windows\System32",
+    r"..\..\etc\passwd",
+    "../../etc/passwd",
+    r"subdir\..\..\escape",
+]
+
+
+@pytest.mark.parametrize("candidate", CROSS_PLATFORM_HOSTILE)
+def test_hostile_paths_are_refused_on_every_platform(tmp_path: Path, candidate: str) -> None:
+    with pytest.raises(Forbidden):
+        safe_path(tmp_path, candidate)
+
+
+@pytest.mark.parametrize(
+    "candidate",
+    ["report.csv", "nested/report.csv", "a/b/c.json", "file-with-dashes_and_underscores.txt"],
+)
+def test_ordinary_relative_paths_are_still_allowed(tmp_path: Path, candidate: str) -> None:
+    resolved = safe_path(tmp_path, candidate)
+    assert resolved.is_relative_to(tmp_path.resolve())

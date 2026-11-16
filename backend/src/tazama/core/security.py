@@ -191,12 +191,35 @@ class RateLimiter:
 # ------------------------------------------------------------------ safe paths
 
 
+#: Shapes that are absolute on *some* platform. Checked on every platform on purpose.
+#:
+#: `Path.resolve()` alone makes this control platform-dependent, which is the trap. On
+#: Windows `base / "C:/Windows/System32"` discards `base` and escapes, so it is refused.
+#: On Linux the same string is just a relative path and lands at `base/C:/Windows/...`,
+#: which stays inside `base` and is therefore accepted. Containment still holds, so this
+#: is not an escape — but the rule a developer sees on Windows is not the rule running in
+#: the Linux container, and a control that differs between the two is a control nobody can
+#: reason about. So the hostile shapes are rejected everywhere, by inspection, before any
+#: platform-specific resolution happens.
+_ABSOLUTE_SHAPES = (
+    re.compile(r"^[A-Za-z]:"),  # C:\ or C:/ — a Windows drive
+    re.compile(r"^[/\\]"),  # /etc/passwd, \Windows, and UNC \\server\share
+)
+
+
 def safe_path(base: Path, candidate: str) -> Path:
     """Resolve `candidate` under `base`, refusing traversal and absolute escapes."""
     if not candidate or candidate.strip() != candidate:
         raise Forbidden("Invalid file name.")
     if "\x00" in candidate:
         raise Forbidden("Invalid file name.")
+    # A backslash is a separator on Windows and a legal filename character on Linux.
+    # Nothing this function is asked for legitimately contains one, and allowing it would
+    # mean `..\..\etc` is traversal on one platform and a filename on the other.
+    if "\\" in candidate:
+        raise Forbidden("Invalid file name.")
+    if any(pattern.match(candidate) for pattern in _ABSOLUTE_SHAPES):
+        raise Forbidden("Path escapes the permitted directory.")
     base_resolved = base.resolve()
     target = (base_resolved / candidate).resolve()
     if base_resolved != target and base_resolved not in target.parents:
