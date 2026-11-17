@@ -113,6 +113,12 @@ def main() -> None:
             if wait_for_port(3000, timeout=15.0):
                 print("      Next.js console is ready on http://localhost:3000")
             else:
+                # Retry once if Next stopped for advisory
+                if p_web.poll() is not None:
+                    print("      Retrying Next.js dev server...")
+                    p_web = subprocess.Popen([NPM_CMD, "run", "dev"], cwd=str(WEB), env=env)
+                    procs[-1] = ("Next.js Frontend", p_web)
+                    wait_for_port(3000, timeout=15.0)
                 print("      Next.js compiling...")
 
         print()
